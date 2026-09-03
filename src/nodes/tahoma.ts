@@ -56,11 +56,15 @@ const validateStatus = (
   configNode: nodered.Node,
   execId: string,
 ): Promise<boolean> =>
-  new Promise((resolve) =>
-    setTimeout(async () => {
+  new Promise((resolve, reject) =>
+    setTimeout(() => {
       const somfyClient = new SomfyApi(configNode);
-      const status = await somfyClient.getStatusForExecutionId(execId);
-      resolve(status === null);
+      somfyClient
+        .getStatusForExecutionId(execId)
+        .then((status) => {
+          resolve(status === null);
+        })
+        .catch(reject);
     }, STATE_VALIDATOR_POLLING_DELAY),
   );
 
@@ -121,7 +125,7 @@ export = (RED: nodered.NodeAPI) => {
               return;
             }
             const execId = commandExecutionResponse.execId;
-            continueWhenCompleted(configNode, execId).then(() => {
+            return continueWhenCompleted(configNode, execId).then(() => {
               this.status({
                 fill: 'green',
                 shape: 'dot',
@@ -129,6 +133,15 @@ export = (RED: nodered.NodeAPI) => {
               });
               this.send(msg);
             });
+          })
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            this.status({
+              fill: 'red',
+              shape: 'ring',
+              text: 'TaHoma not reachable',
+            });
+            this.error(`TaHoma error: ${message}`, msg);
           });
       });
     },

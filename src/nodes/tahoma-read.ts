@@ -15,10 +15,21 @@ export = (RED: nodered.NodeAPI) => {
 
       this.on('input', (msg: nodered.NodeMessage) => {
         const somfyClient = new SomfyApi(config);
-        somfyClient.getDevice(this['device']).then((deviceData) => {
-          msg.payload = deviceData;
-          this.send(msg);
-        });
+        somfyClient
+          .getDevice(this['device'])
+          .then((deviceData) => {
+            msg.payload = deviceData;
+            this.send(msg);
+          })
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            this.status({
+              fill: 'red',
+              shape: 'ring',
+              text: 'TaHoma not reachable',
+            });
+            this.error(`TaHoma error: ${message}`, msg);
+          });
       });
     },
   );

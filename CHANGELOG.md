@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [3.0.2] - 2026-10-29
+
+---
+
+⚠️ This release was not tested on all possible Somfy hardware. Use it at your own risk.
+
+---
+
+---
+
+🚨 **This release add the "my" action and fix a possible Node-Red crash when the Tahoma box is unreachable (Pull request # 1, thanks to @jomifa). **
+
+---
+
+### Added
+
+- Include PR#1 and add "my" action
+
 ## [3.0.1] - 2026-02-05
 
 ---

@@ -65,6 +65,7 @@ Currently, only a few commands are understood by this node. The possible values 
 * `setIntensity`: This will set the device intensity (light, ...). The action is passed using the `intensity` property, which is required in this mode.
 * `toggle`: This will toggle the device
 * `stop`: This will stop all running actions
+* `my`: This will move a compatible blind to its programmed Somfy favorite ("My") position.No `position` parameter is required.
 * `customPosition`: This will set the device to a custom position. The position is passed using the `position` property, which is required in this mode.
 * `customRotation` or `customOrientation`: This will set the device (blinds) to a custom rotation. The rotation is passed using the `orientation` property, which is required in this mode.
 * `customClosureAndOrientation`: This will set the device (blinds) to a custom closure and rotation. The rotation is passed using the `orientation` property and the position is passed using the `position` property, which are both required in this mode.

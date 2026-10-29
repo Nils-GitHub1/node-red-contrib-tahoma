@@ -24,6 +24,7 @@ enum TahomaCommands {
   CLOSE = 'close',
   ROTATION = 'setOrientation',
   STOP = 'stop',
+  MY = 'my',
   SET_CLOSURE = 'setClosure',
   SET_CLOSURE_AND_ORIENTATION = 'setClosureAndOrientation',
   ON = 'on',
@@ -101,7 +102,7 @@ export = (RED: nodered.NodeAPI) => {
           parameters: instructions.parameters || [],
         };
 
-        if (msg.payload.lowspeed && instructions.command !== 'stop') {
+        if (msg.payload.lowspeed && instructions.command !== 'stop' &&   typeof instructions.expectedState?.position === 'number') {
           const targetPosition = instructions.expectedState.position || 0;
           command.name = 'position_low_speed';
           command.parameters = [targetPosition];
@@ -232,6 +233,15 @@ function generateInstructionsFromPayload(
         labels: {
           done: `Stopped`,
           progress: `Stopping...`,
+        },
+      };
+
+    case 'my':
+      return {
+        command: TahomaCommands.MY,
+        labels: {
+          done: 'My position',
+          progress: 'Moving to My position...',
         },
       };
 

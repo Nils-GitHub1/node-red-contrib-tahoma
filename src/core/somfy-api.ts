@@ -148,6 +148,14 @@ export class SomfyApi {
     });
   }
 
+  public getDeviceStates(device: string): Promise<Array<{ name: string; value: unknown }>> {
+    const sanitizedDeviceUrl = encodeURIComponent(device);
+    return this._request({
+      url: `${this.getGatewayUrl()}/setup/devices/${sanitizedDeviceUrl}/states`,
+      method: 'GET',
+    });
+  }
+
   public getDevices(): Promise<IDevice[]> {
     return this._request({
       url: `${this.getGatewayUrl()}/setup/devices`,

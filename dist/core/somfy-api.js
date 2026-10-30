@@ -168,6 +168,13 @@ var SomfyApi = /** @class */ (function () {
             method: 'GET',
         });
     };
+    SomfyApi.prototype.getDeviceStates = function (device) {
+        var sanitizedDeviceUrl = encodeURIComponent(device);
+        return this._request({
+            url: "".concat(this.getGatewayUrl(), "/setup/devices/").concat(sanitizedDeviceUrl, "/states"),
+            method: 'GET',
+        });
+    };
     SomfyApi.prototype.getDevices = function () {
         return this._request({
             url: "".concat(this.getGatewayUrl(), "/setup/devices"),

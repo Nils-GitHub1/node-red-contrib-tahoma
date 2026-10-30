@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-## [3.0.2] - 2026-10-29
+## [3.3.2] - 2026-10-29
 
 ---
 
@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-🚨 **This release add the "my" action and fix a possible Node-Red crash when the Tahoma box is unreachable (Pull request # 1, thanks to @jomifa). **
+🚨 **This release add the "my" action and fix a possible Node-Red crash when the Tahoma box is unreachable (Pull request # 1, thanks to @jomifa). My and Stop action completion checks added. Version number bumped from 3.0.x to 3.3.x to be more realistic based on original code version before fork.**
 
 ---
 

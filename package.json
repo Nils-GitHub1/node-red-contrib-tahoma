@@ -1,6 +1,6 @@
 {
   "name": "@nils-github1/node-red-contrib-tahoma",
-  "version": "3.3.1",
+  "version": "3.3.2",
   "description": "Control a Somfy TaHoma box from Node RED",
   "keywords": [
     "node",

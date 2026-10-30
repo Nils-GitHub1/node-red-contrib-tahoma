@@ -20,8 +20,14 @@ export = (RED: nodered.NodeAPI): void => {
   );
 
   RED.httpAdmin.post('/somfy/get-token', async (request, response) => {
-    const { userId, userPassword, tahomaPin, somfyOverkizSrvUrl, } = request.body;
-    const token = await SomfyApi.getLocalToken(userId, userPassword, tahomaPin, somfyOverkizSrvUrl);
+    const { userId, userPassword, tahomaPin, somfyOverkizSrvUrl } =
+      request.body;
+    const token = await SomfyApi.getLocalToken(
+      userId,
+      userPassword,
+      tahomaPin,
+      somfyOverkizSrvUrl,
+    );
     if (token === null) {
       response.status(HttpResponse.BAD_REQUEST);
       response.send();

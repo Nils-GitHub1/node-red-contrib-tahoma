@@ -48,7 +48,7 @@
     "@types/node-red": ">=1.2.1",
     "@typescript-eslint/eslint-plugin": ">=5.20.0",
     "@typescript-eslint/parser": ">=5.20.0",
-    "eslint": ">=8.13.0",
+    "eslint": "8.57.1",
     "eslint-config-prettier": ">=8.5.0",
     "eslint-plugin-prettier": ">=4.0.0",
     "prettier": ">=2.6.2",
@@ -63,7 +63,10 @@
     "nodes": {
       "tahoma": "dist/nodes/tahoma.js",
       "tahoma-config": "dist/nodes/tahoma-config.js",
-      "tahoma-read": "dist/nodes/tahoma-read.js"
+      "tahoma-read": "dist/nodes/tahoma-read.js",
+      "tahoma-scenario-ctrl": "dist/nodes/tahoma-scenario-control.js",
+      "tahoma-cloud-config": "dist/nodes/tahoma-cloud-config.js",
+      "tahoma-scenarios": "dist/nodes/tahoma-scenarios.js"
     }
   }
 }

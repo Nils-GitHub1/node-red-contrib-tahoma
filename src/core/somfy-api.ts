@@ -10,7 +10,11 @@ export class SomfyApi {
   private configNode: Node;
   private axiosInstance: AxiosInstance;
 
-  static async getSessionId(userId: string, userPwd: string, somfyOverkizSrvUrl: string,) {
+  static async getSessionId(
+    userId: string,
+    userPwd: string,
+    somfyOverkizSrvUrl: string,
+  ) {
     return axios({
       url: `${somfyOverkizSrvUrl}/login`,
       method: 'POST',
@@ -44,7 +48,11 @@ export class SomfyApi {
     tahomaPin: string,
     somfyOverkizSrvUrl: string,
   ) {
-    const sessionId = await SomfyApi.getSessionId(userId, userPwd, somfyOverkizSrvUrl);
+    const sessionId = await SomfyApi.getSessionId(
+      userId,
+      userPwd,
+      somfyOverkizSrvUrl,
+    );
     if (sessionId === null) {
       return null;
     }
@@ -62,8 +70,12 @@ export class SomfyApi {
       return null;
     }
 
-
-    await SomfyApi.activateLocalToken(token, tahomaPin, sessionId, somfyOverkizSrvUrl,);
+    await SomfyApi.activateLocalToken(
+      token,
+      tahomaPin,
+      sessionId,
+      somfyOverkizSrvUrl,
+    );
     return token;
   }
 
@@ -81,16 +93,16 @@ export class SomfyApi {
       data: {
         token,
         scope: 'devmode',
-        label: 
-          'Node RED Instance ' + 
-          now.getFullYear() + 
-          `${now.getMonth() + 1 < 10 ? '0' : ''}${now.getMonth() + 1}`+ 
-          `${now.getDate() < 10 ? '0' : ''}${now.getDate()}` + 
-          '-' + 
-          now.getHours() + 
-          'h' + 
-          now.getMinutes() + 
-          'm' + 
+        label:
+          'Node RED Instance ' +
+          now.getFullYear() +
+          `${now.getMonth() + 1 < 10 ? '0' : ''}${now.getMonth() + 1}` +
+          `${now.getDate() < 10 ? '0' : ''}${now.getDate()}` +
+          '-' +
+          now.getHours() +
+          'h' +
+          now.getMinutes() +
+          'm' +
           now.getSeconds(),
       },
       headers: {
@@ -109,13 +121,13 @@ export class SomfyApi {
     this.configNode = configNode;
 
     this.axiosInstance.interceptors.request.use(
-      config => {
+      (config) => {
         config.headers['Authorization'] = `Bearer ${this.getAccessToken()}`;
-          return config;
+        return config;
       },
-      error => {
+      (error) => {
         return Promise.reject(error);
-      }
+      },
     );
   }
 
@@ -148,7 +160,9 @@ export class SomfyApi {
     });
   }
 
-  public getDeviceStates(device: string): Promise<Array<{ name: string; value: unknown }>> {
+  public getDeviceStates(
+    device: string,
+  ): Promise<Array<{ name: string; value: unknown }>> {
     const sanitizedDeviceUrl = encodeURIComponent(device);
     return this._request({
       url: `${this.getGatewayUrl()}/setup/devices/${sanitizedDeviceUrl}/states`,

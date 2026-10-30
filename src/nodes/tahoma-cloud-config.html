@@ -1,0 +1,131 @@
+<script type="text/javascript">
+  RED.nodes.registerType('tahoma-cloud-config', {
+    category: 'config',
+    defaults: {
+      name: { value: '', required: true },
+      region: { value: 'europe', required: true },
+    },
+    credentials: {
+      userId: { type: 'text', required: true },
+      userPassword: { type: 'password', required: true },
+    },
+    label: function () {
+      return this.name || 'TaHoma Cloud';
+    },
+    oneditprepare: function () {
+      $('#node-config-input-region').val(this.region || 'europe');
+
+      $('#node-config-input-cloud-test').on('click', function () {
+        const button = $(this);
+        const userId = $('#node-config-input-userId').val();
+        const userPassword = $('#node-config-input-userPassword').val();
+        const region = $('#node-config-input-region').val();
+
+        if (!userId || !userPassword) {
+          $('#node-config-cloud-error')
+            .text('Please enter your Somfy email and password.')
+            .show();
+          return;
+        }
+
+        button.prop('disabled', true).text('Connecting...');
+        $('#node-config-cloud-result').hide();
+        $('#node-config-cloud-error').hide();
+
+        $.ajax({
+          url:
+            window.location.protocol +
+            '//' +
+            window.location.host +
+            window.location.pathname +
+            'somfy/cloud/test',
+          method: 'POST',
+          data: { userId, userPassword, region },
+          success: function (response) {
+            $('#node-config-cloud-result')
+              .text(
+                'Connection successful! Found ' +
+                  response.scenarioCount +
+                  ' scenario(s).',
+              )
+              .show();
+          },
+          error: function () {
+            $('#node-config-cloud-error')
+              .text(
+                'Connection failed. Check your credentials, region and internet connection.',
+              )
+              .show();
+          },
+          complete: function () {
+            button.prop('disabled', false).text('Test Cloud Connection');
+          },
+        });
+      });
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="tahoma-cloud-config">
+  <div class="form-row">
+    <label for="node-config-input-name">
+      <i class="fa fa-tag"></i> Connection name
+    </label>
+    <input type="text" id="node-config-input-name" placeholder="TaHoma Cloud">
+  </div>
+
+  <div class="form-row">
+    <label for="node-config-input-userId">
+      <i class="fa fa-user"></i> Somfy email
+    </label>
+    <input type="text" id="node-config-input-userId">
+  </div>
+
+  <div class="form-row">
+    <label for="node-config-input-userPassword">
+      <i class="fa fa-lock"></i> Password
+    </label>
+    <input type="password" id="node-config-input-userPassword">
+  </div>
+
+  <div class="form-row">
+    <label for="node-config-input-region">
+      <i class="fa fa-globe"></i> Regional server
+    </label>
+    <select id="node-config-input-region">
+      <option value="europe">Europe</option>
+      <option value="america">Americas</option>
+      <option value="oceania">Oceania</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <button type="button" id="node-config-input-cloud-test">
+      Test Cloud Connection
+    </button>
+  </div>
+
+  <div
+    id="node-config-cloud-result"
+    style="display:none; color:green; padding:10px;"
+  ></div>
+
+  <div
+    id="node-config-cloud-error"
+    style="display:none; color:#AD1625; padding:10px;"
+  ></div>
+
+  <div class="form-tips">
+    This configuration connects to your existing Somfy TaHoma Cloud account.
+    It does not replace or modify the local TaHoma connection.
+  </div>
+</script>
+
+<script type="text/html" data-help-name="tahoma-cloud-config">
+  <p>Configuration for Somfy TaHoma Cloud scenario control.</p>
+  <p>
+    Select the regional server corresponding to your Somfy account.
+    Existing scenarios created in the official TaHoma application
+    will be available through this connection.
+  </p>
+</script>

@@ -58,27 +58,62 @@ var SomfyApi = /** @class */ (function () {
     }
     SomfyApi.getSessionId = function (userId, userPwd, somfyOverkizSrvUrl) {
         return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                return [2 /*return*/, (0, axios_1.default)({
-                        url: "".concat(somfyOverkizSrvUrl, "/login"),
-                        method: 'POST',
-                        data: "userId=".concat(userId, "&userPassword=").concat(userPwd),
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    })
-                        .then(function (response) {
-                        var cookieHeader = response.headers['set-cookie'];
-                        if (!cookieHeader) {
-                            return null;
-                        }
-                        var sessionCookie = cookieHeader.find(function (c) {
-                            return c.startsWith('JSESSIONID');
+            var loginData, response, cookieHeader, cookies, sessionCookie, match, error_1, status_1, statusText;
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        loginData = new URLSearchParams({
+                            userId: userId,
+                            userPassword: userPwd,
+                        });
+                        _c.label = 1;
+                    case 1:
+                        _c.trys.push([1, 3, , 4]);
+                        return [4 /*yield*/, (0, axios_1.default)({
+                                url: "".concat(somfyOverkizSrvUrl, "/login"),
+                                method: 'POST',
+                                data: loginData.toString(),
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                    Accept: 'application/json, text/plain, */*',
+                                },
+                                timeout: 20000,
+                            })];
+                    case 2:
+                        response = _c.sent();
+                        cookieHeader = response.headers['set-cookie'];
+                        cookies = Array.isArray(cookieHeader)
+                            ? cookieHeader
+                            : typeof cookieHeader === 'string'
+                                ? [cookieHeader]
+                                : [];
+                        sessionCookie = cookies.find(function (cookie) {
+                            return /^JSESSIONID=/i.test(cookie.trim());
                         });
                         if (!sessionCookie) {
-                            return null;
+                            throw new Error("Somfy login returned HTTP ".concat(response.status, ", ") +
+                                "but no JSESSIONID cookie was found. " +
+                                "Content-Type: ".concat(response.headers['content-type'] || 'unknown', ". ") +
+                                "Cookies received: ".concat(cookies.map(function (c) { return c.split('=')[0]; }).join(', ') || 'none', "."));
                         }
-                        return sessionCookie.substring(sessionCookie.indexOf('=') + 1, sessionCookie.indexOf(';'));
-                    })
-                        .catch(function () { return null; })];
+                        match = sessionCookie.match(/^JSESSIONID=([^;]+)/i);
+                        if (!match || !match[1]) {
+                            throw new Error('Somfy returned an empty JSESSIONID cookie');
+                        }
+                        return [2 /*return*/, match[1]];
+                    case 3:
+                        error_1 = _c.sent();
+                        if (axios_1.default.isAxiosError(error_1)) {
+                            status_1 = (_a = error_1.response) === null || _a === void 0 ? void 0 : _a.status;
+                            statusText = (_b = error_1.response) === null || _b === void 0 ? void 0 : _b.statusText;
+                            throw new Error("Somfy login HTTP error: " +
+                                "".concat(status_1 || 'No HTTP response', " ") +
+                                "".concat(statusText || error_1.message));
+                        }
+                        throw error_1;
+                    case 4: return [2 /*return*/];
+                }
             });
         });
     };

@@ -29,23 +29,45 @@ export class SomfyCloudApi {
 
   /**
    * Authenticate against the Somfy Overkiz cloud.
+   *
+   * Special characters in the username and password are handled
+   * by SomfyApi.getSessionId() using URLSearchParams.
    */
   public async login(): Promise<void> {
-    const sessionId = await SomfyApi.getSessionId(
-      this.userId,
-      this.userPassword,
-      this.serverUrl,
-    );
+    this.sessionId = null;
 
-    if (!sessionId) {
+    try {
+      const sessionId = await SomfyApi.getSessionId(
+        this.userId,
+        this.userPassword,
+        this.serverUrl,
+      );
+
+      if (!sessionId) {
+        throw new Error(
+          'Somfy Cloud did not return a valid JSESSIONID cookie. ' +
+            'Check credentials, region and account permissions.',
+        );
+      }
+
+      this.sessionId = sessionId;
+    } catch (error) {
+      this.sessionId = null;
+
+      if (error instanceof Error) {
+        throw new Error(`Somfy Cloud authentication failed: ${error.message}`);
+      }
+
       throw new Error('Somfy Cloud authentication failed');
     }
-
-    this.sessionId = sessionId;
   }
 
   /**
    * Check whether the current session is still valid.
+   *
+   * Note: this checks both authentication and access to actionGroups.
+   * A permission error may therefore return false even when login
+   * itself was successful.
    */
   public async isAuthenticated(): Promise<boolean> {
     if (!this.sessionId) {
@@ -122,6 +144,21 @@ export class SomfyCloudApi {
       },
     };
 
-    return this.axiosInstance.request(config);
+    return this.axiosInstance.request(config).catch((error) => {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const responseData = error.response?.data;
+
+        throw new Error(
+          `Somfy Cloud API request failed` +
+            (status ? ` (HTTP ${status})` : '') +
+            (responseData
+              ? `: ${JSON.stringify(responseData)}`
+              : error.message),
+        );
+      }
+
+      throw error;
+    });
   }
 }

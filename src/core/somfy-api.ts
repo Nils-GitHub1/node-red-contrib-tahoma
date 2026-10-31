@@ -14,32 +14,68 @@ export class SomfyApi {
     userId: string,
     userPwd: string,
     somfyOverkizSrvUrl: string,
-  ) {
-    return axios({
-      url: `${somfyOverkizSrvUrl}/login`,
-      method: 'POST',
-      data: `userId=${userId}&userPassword=${userPwd}`,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    })
-      .then((response: AxiosResponse) => {
-        const cookieHeader = response.headers['set-cookie'];
-        if (!cookieHeader) {
-          return null;
-        }
+  ): Promise<string | null> {
+    const loginData = new URLSearchParams({
+      userId,
+      userPassword: userPwd,
+    });
 
-        const sessionCookie = cookieHeader.find((c) =>
-          c.startsWith('JSESSIONID'),
-        );
-        if (!sessionCookie) {
-          return null;
-        }
+    try {
+      const response: AxiosResponse = await axios({
+        url: `${somfyOverkizSrvUrl}/login`,
+        method: 'POST',
+        data: loginData.toString(),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json, text/plain, */*',
+        },
+        timeout: 20000,
+      });
 
-        return sessionCookie.substring(
-          sessionCookie.indexOf('=') + 1,
-          sessionCookie.indexOf(';'),
+      const cookieHeader = response.headers['set-cookie'];
+
+      // Axios normally returns Set-Cookie as an array.
+      // Handle a string as well, for compatibility.
+      const cookies: string[] = Array.isArray(cookieHeader)
+        ? cookieHeader
+        : typeof cookieHeader === 'string'
+          ? [cookieHeader]
+          : [];
+
+      const sessionCookie = cookies.find((cookie) =>
+        /^JSESSIONID=/i.test(cookie.trim()),
+      );
+
+      if (!sessionCookie) {
+        throw new Error(
+          `Somfy login returned HTTP ${response.status}, ` +
+            `but no JSESSIONID cookie was found. ` +
+            `Content-Type: ${response.headers['content-type'] || 'unknown'}. ` +
+            `Cookies received: ${cookies.map((c) => c.split('=')[0]).join(', ') || 'none'}.`,
         );
-      })
-      .catch(() => null);
+      }
+
+      const match = sessionCookie.match(/^JSESSIONID=([^;]+)/i);
+
+      if (!match || !match[1]) {
+        throw new Error('Somfy returned an empty JSESSIONID cookie');
+      }
+
+      return match[1];
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const statusText = error.response?.statusText;
+
+        throw new Error(
+          `Somfy login HTTP error: ` +
+            `${status || 'No HTTP response'} ` +
+            `${statusText || error.message}`,
+        );
+      }
+
+      throw error;
+    }
   }
 
   static async getLocalToken(
@@ -53,6 +89,7 @@ export class SomfyApi {
       userPwd,
       somfyOverkizSrvUrl,
     );
+
     if (sessionId === null) {
       return null;
     }
@@ -66,6 +103,7 @@ export class SomfyApi {
     });
 
     const token = response.data.token;
+
     if (!token) {
       return null;
     }
@@ -76,6 +114,7 @@ export class SomfyApi {
       sessionId,
       somfyOverkizSrvUrl,
     );
+
     return token;
   }
 
@@ -87,6 +126,7 @@ export class SomfyApi {
   ) {
     // Current date and time
     const now = new Date();
+
     return axios({
       url: `${somfyOverkizSrvUrl}/config/${pin}/local/tokens`,
       method: 'POST',
@@ -118,6 +158,7 @@ export class SomfyApi {
         rejectUnauthorized: false,
       }),
     });
+
     this.configNode = configNode;
 
     this.axiosInstance.interceptors.request.use(
@@ -149,11 +190,13 @@ export class SomfyApi {
     if (!this.configNode || !this.configNode['url']) {
       return undefined;
     }
+
     return `${this.configNode['url']}/enduser-mobile-web/1/enduserAPI`;
   }
 
   public getDevice(device: string): Promise<IDevice> {
     const sanitizedDeviceUrl = encodeURIComponent(device);
+
     return this._request({
       url: `${this.getGatewayUrl()}/setup/devices/${sanitizedDeviceUrl}`,
       method: 'GET',
@@ -164,6 +207,7 @@ export class SomfyApi {
     device: string,
   ): Promise<Array<{ name: string; value: unknown }>> {
     const sanitizedDeviceUrl = encodeURIComponent(device);
+
     return this._request({
       url: `${this.getGatewayUrl()}/setup/devices/${sanitizedDeviceUrl}/states`,
       method: 'GET',

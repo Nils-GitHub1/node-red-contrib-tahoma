@@ -62,26 +62,47 @@ var SomfyCloudApi = /** @class */ (function () {
     }
     /**
      * Authenticate against the Somfy Overkiz cloud.
+     *
+     * Special characters in the username and password are handled
+     * by SomfyApi.getSessionId() using URLSearchParams.
      */
     SomfyCloudApi.prototype.login = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var sessionId;
+            var sessionId, error_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, somfy_api_1.SomfyApi.getSessionId(this.userId, this.userPassword, this.serverUrl)];
+                    case 0:
+                        this.sessionId = null;
+                        _a.label = 1;
                     case 1:
+                        _a.trys.push([1, 3, , 4]);
+                        return [4 /*yield*/, somfy_api_1.SomfyApi.getSessionId(this.userId, this.userPassword, this.serverUrl)];
+                    case 2:
                         sessionId = _a.sent();
                         if (!sessionId) {
-                            throw new Error('Somfy Cloud authentication failed');
+                            throw new Error('Somfy Cloud did not return a valid JSESSIONID cookie. ' +
+                                'Check credentials, region and account permissions.');
                         }
                         this.sessionId = sessionId;
-                        return [2 /*return*/];
+                        return [3 /*break*/, 4];
+                    case 3:
+                        error_1 = _a.sent();
+                        this.sessionId = null;
+                        if (error_1 instanceof Error) {
+                            throw new Error("Somfy Cloud authentication failed: ".concat(error_1.message));
+                        }
+                        throw new Error('Somfy Cloud authentication failed');
+                    case 4: return [2 /*return*/];
                 }
             });
         });
     };
     /**
      * Check whether the current session is still valid.
+     *
+     * Note: this checks both authentication and access to actionGroups.
+     * A permission error may therefore return false even when login
+     * itself was successful.
      */
     SomfyCloudApi.prototype.isAuthenticated = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -170,7 +191,19 @@ var SomfyCloudApi = /** @class */ (function () {
             return Promise.reject(new Error('Not authenticated with Somfy Cloud'));
         }
         var config = __assign(__assign({}, options), { headers: __assign(__assign({}, options.headers), { Cookie: "JSESSIONID=".concat(this.sessionId) }) });
-        return this.axiosInstance.request(config);
+        return this.axiosInstance.request(config).catch(function (error) {
+            var _a, _b;
+            if (axios_1.default.isAxiosError(error)) {
+                var status_1 = (_a = error.response) === null || _a === void 0 ? void 0 : _a.status;
+                var responseData = (_b = error.response) === null || _b === void 0 ? void 0 : _b.data;
+                throw new Error("Somfy Cloud API request failed" +
+                    (status_1 ? " (HTTP ".concat(status_1, ")") : '') +
+                    (responseData
+                        ? ": ".concat(JSON.stringify(responseData))
+                        : error.message));
+            }
+            throw error;
+        });
     };
     return SomfyCloudApi;
 }());

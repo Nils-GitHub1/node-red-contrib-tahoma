@@ -1,453 +1,430 @@
 <script type="text/javascript">
-    RED.nodes.registerType('tahoma-scenario-control', {
-        category: 'function',
-        color: '#E2D96E',
+  RED.nodes.registerType('tahoma-scenario-control', {
+    category: 'function',
+    color: '#E2D96E',
 
-        defaults: {
-            cloudConfig: {
-                value: '',
-                type: 'tahoma-cloud-config',
-                required: true,
-            },
-            scenarioId: {
-                value: '',
-            },
-            name: {
-                value: '',
-            },
-        },
+    defaults: {
+      cloudConfig: {
+        value: '',
+        type: 'tahoma-cloud-config',
+        required: true,
+      },
+      scenarioId: {
+        value: '',
+      },
+      name: {
+        value: '',
+      },
+    },
 
-        inputs: 1,
-        outputs: 1,
-        icon: 'bridge-dash.png',
+    inputs: 1,
+    outputs: 1,
+    icon: 'bridge-dash.png',
 
-        label: function () {
-            return this.name || 'TaHoma Scenario Control';
-        },
+    label: function () {
+      return this.name || 'TaHoma Scenario Control';
+    },
 
-        labelStyle: function () {
-            return this.name ? 'node_label_italic' : '';
-        },
+    labelStyle: function () {
+      return this.name ? 'node_label_italic' : '';
+    },
 
-        oneditprepare: function () {
-            const scenarioSelect = $('#node-input-scenarioId');
-            const refreshButton = $('#node-input-refresh-scenarios');
-            const cloudConfigInput = $('#node-input-cloudConfig');
+    oneditprepare: function () {
+      const scenarioSelect = $('#node-input-scenarioId');
+      const refreshButton = $('#node-input-refresh-scenarios');
+      const cloudConfigInput = $('#node-input-cloudConfig');
 
-            let activeRequest = null;
-            let requestId = 0;
+      let activeRequest = null;
+      let requestId = 0;
 
-            // Keep the scenario ID saved in the Node-RED flow.
-            let configuredScenarioId = this.scenarioId || '';
+      // Keep the scenario ID saved in the Node-RED flow.
+      let configuredScenarioId = this.scenarioId || '';
 
-            function addOption(value, label) {
-                // Avoid duplicate options.
-                const exists = scenarioSelect
-                    .find('option')
-                    .filter(function () {
-                        return String($(this).val()) === String(value);
-                    }).length > 0;
+      function addOption(value, label) {
+        // Avoid duplicate options.
+        const exists =
+          scenarioSelect.find('option').filter(function () {
+            return String($(this).val()) === String(value);
+          }).length > 0;
 
-                if (!exists) {
-                    scenarioSelect.append(
-                        $('<option>')
-                            .val(value)
-                            .text(label)
-                    );
-                }
+        if (!exists) {
+          scenarioSelect.append($('<option>').val(value).text(label));
+        }
+      }
+
+      function loadScenarios(preserveSelection) {
+        const configId = cloudConfigInput.val();
+
+        // Preserve the current selection or saved scenario ID.
+        const selectedScenario = preserveSelection
+          ? String(configuredScenarioId || scenarioSelect.val() || '')
+          : '';
+
+        // Cancel previous requests and invalidate their responses.
+        requestId++;
+
+        const currentRequestId = requestId;
+
+        if (activeRequest) {
+          activeRequest.abort();
+          activeRequest = null;
+        }
+
+        scenarioSelect
+          .empty()
+          .append(
+            $('<option>').val('').text('Use msg.payload.scenarioId (dynamic)'),
+          );
+
+        if (!configId || configId === '_ADD_') {
+          // Preserve the saved scenario even without a
+          // currently selected cloud configuration.
+          if (selectedScenario) {
+            addOption(selectedScenario, 'Previously selected scenario');
+            scenarioSelect.val(selectedScenario);
+            configuredScenarioId = selectedScenario;
+          }
+
+          scenarioSelect.prop('disabled', false);
+          refreshButton.prop('disabled', true);
+
+          return;
+        }
+
+        scenarioSelect.prop('disabled', true);
+        refreshButton.prop('disabled', true);
+
+        const request = $.getJSON(
+          '/somfy/cloud/' + encodeURIComponent(configId) + '/scenarios',
+        );
+
+        activeRequest = request;
+
+        request
+          .done(function (response) {
+            // Ignore outdated requests.
+            if (currentRequestId !== requestId) {
+              return;
             }
 
-            function loadScenarios(preserveSelection) {
-                const configId = cloudConfigInput.val();
+            if (!response || !Array.isArray(response.scenarios)) {
+              addOption('', 'Invalid scenario response');
+              return;
+            }
 
-                // Preserve the current selection or saved scenario ID.
-                const selectedScenario = preserveSelection
-                    ? String(
-                        scenarioSelect.val() ||
-                        configuredScenarioId ||
-                        ''
-                    )
-                    : '';
+            // Populate available scenarios.
+            response.scenarios.forEach(function (scenario) {
+              if (
+                !scenario ||
+                typeof scenario.id !== 'string' ||
+                typeof scenario.name !== 'string'
+              ) {
+                return;
+              }
 
-                // Cancel previous requests and invalidate their responses.
-                requestId++;
+              addOption(scenario.id, scenario.name);
+            });
 
-                const currentRequestId = requestId;
+            // Restore the saved scenario even if it is
+            // temporarily missing from the cloud response.
+            if (selectedScenario) {
+              const exists =
+                scenarioSelect.find('option').filter(function () {
+                  return String($(this).val()) === selectedScenario;
+                }).length > 0;
 
-                if (activeRequest) {
-                    activeRequest.abort();
-                    activeRequest = null;
-                }
-
-                scenarioSelect
-                    .empty()
-                    .append(
-                        $('<option>')
-                            .val('')
-                            .text('Use msg.payload.scenarioId (dynamic)')
-                    );
-
-                if (!configId || configId === '_ADD_') {
-                    // Preserve the saved scenario even without a
-                    // currently selected cloud configuration.
-                    if (selectedScenario) {
-                        addOption(
-                            selectedScenario,
-                            'Previously selected scenario'
-                        );
-                        scenarioSelect.val(selectedScenario);
-                        configuredScenarioId = selectedScenario;
-                    }
-
-                    scenarioSelect.prop('disabled', false);
-                    refreshButton.prop('disabled', true);
-
-                    return;
-                }
-
-                scenarioSelect.prop('disabled', true);
-                refreshButton.prop('disabled', true);
-
-                const request = $.getJSON(
-                    '/somfy/cloud/' +
-                    encodeURIComponent(configId) +
-                    '/scenarios'
+              if (!exists) {
+                addOption(
+                  selectedScenario,
+                  'Previously selected scenario (not returned by cloud)',
                 );
-
-                activeRequest = request;
-
-                request
-                    .done(function (response) {
-                        // Ignore outdated requests.
-                        if (currentRequestId !== requestId) {
-                            return;
-                        }
-
-                        if (
-                            !response ||
-                            !Array.isArray(response.scenarios)
-                        ) {
-                            addOption('', 'Invalid scenario response');
-                            return;
-                        }
-
-                        // Populate available scenarios.
-                        response.scenarios.forEach(function (scenario) {
-                            if (
-                                !scenario ||
-                                typeof scenario.id !== 'string' ||
-                                typeof scenario.name !== 'string'
-                            ) {
-                                return;
-                            }
-
-                            addOption(scenario.id, scenario.name);
-                        });
-
-                        // Restore the saved scenario even if it is
-                        // temporarily missing from the cloud response.
-                        if (selectedScenario) {
-                            const exists = scenarioSelect
-                                .find('option')
-                                .filter(function () {
-                                    return String($(this).val()) ===
-                                        selectedScenario;
-                                })
-                                .length > 0;
-
-                            if (!exists) {
-                                addOption(
-                                    selectedScenario,
-                                    'Previously selected scenario (not returned by cloud)'
-                                );
-                            }
-                        }
-
-                        // Restore the selection AFTER populating the dropdown.
-                        scenarioSelect.val(selectedScenario || '');
-
-                        // Keep the restored selection for subsequent refreshes.
-                        configuredScenarioId = selectedScenario || '';
-
-                        if (response.scenarios.length === 0) {
-                            addOption('', 'No scenarios found');
-                        }
-                    })
-                    .fail(function (xhr, status) {
-                        if (currentRequestId !== requestId) {
-                            return;
-                        }
-
-                        if (status !== 'abort') {
-                            addOption(
-                                '',
-                                'Unable to retrieve scenarios. Check cloud configuration.'
-                            );
-
-                            // Preserve the previously saved scenario.
-                            if (selectedScenario) {
-                                addOption(
-                                    selectedScenario,
-                                    'Previously selected scenario'
-                                );
-
-                                scenarioSelect.val(selectedScenario);
-                                configuredScenarioId = selectedScenario;
-                            }
-                        }
-                    })
-                    .always(function () {
-                        if (currentRequestId !== requestId) {
-                            return;
-                        }
-
-                        activeRequest = null;
-
-                        scenarioSelect.prop('disabled', false);
-                        refreshButton.prop('disabled', false);
-                    });
+              }
             }
 
-            // Remember manual scenario selection changes.
-            scenarioSelect.on('change', function () {
-                configuredScenarioId = $(this).val() || '';
-            });
+            // Restore the selection AFTER populating the dropdown.
+            scenarioSelect.val(selectedScenario || '');
 
-            // Changing the cloud configuration resets the scenario.
-            cloudConfigInput.on('change', function () {
-                configuredScenarioId = '';
-                loadScenarios(false);
-            });
+            // Keep the restored selection for subsequent refreshes.
+            configuredScenarioId = selectedScenario || '';
 
-            // Refresh scenarios while preserving the selection.
-            refreshButton.on('click', function (event) {
-                event.preventDefault();
-                loadScenarios(true);
-            });
+            if (response.scenarios.length === 0) {
+              addOption('', 'No scenarios found');
+            }
+          })
+          .fail(function (xhr, status) {
+            if (currentRequestId !== requestId) {
+              return;
+            }
 
-            // Load scenarios and restore the saved selection.
-            loadScenarios(true);
-        },
+            if (status !== 'abort') {
+              addOption(
+                '',
+                'Unable to retrieve scenarios. Check cloud configuration.',
+              );
 
-        // Explicitly persist the selected scenario when saving the node.
-        oneditsave: function () {
-            this.scenarioId = String(
-                $('#node-input-scenarioId').val() || ''
-            );
-        },
-    });
+              // Preserve the previously saved scenario.
+              if (selectedScenario) {
+                addOption(selectedScenario, 'Previously selected scenario');
+
+                scenarioSelect.val(selectedScenario);
+                configuredScenarioId = selectedScenario;
+              }
+            }
+          })
+          .always(function () {
+            if (currentRequestId !== requestId) {
+              return;
+            }
+
+            activeRequest = null;
+
+            scenarioSelect.prop('disabled', false);
+            refreshButton.prop('disabled', false);
+          });
+      }
+
+      // Remember manual scenario selection changes.
+      scenarioSelect.on('change', function () {
+        configuredScenarioId = $(this).val() || '';
+      });
+
+      // Changing the cloud configuration resets the scenario.
+      cloudConfigInput.on('change', function () {
+        configuredScenarioId = '';
+        loadScenarios(false);
+      });
+
+      // Refresh scenarios while preserving the selection.
+      refreshButton.on('click', function (event) {
+        event.preventDefault();
+        loadScenarios(true);
+      });
+
+      // Load scenarios and restore the saved selection.
+      loadScenarios(true);
+    },
+
+    // Explicitly persist the selected scenario when saving the node.
+    oneditsave: function () {
+      const scenarioSelect = $('#node-input-scenarioId');
+
+      const selectedScenario = scenarioSelect.val();
+
+      if (selectedScenario !== null && selectedScenario !== undefined) {
+        this.scenarioId = selectedScenario;
+      }
+    },
+  });
 </script>
 
 <script type="text/x-red" data-template-name="tahoma-scenario-control">
 
-    <div class="form-row">
-        <label for="node-input-name">
-            <i class="icon-tag"></i> Name
-        </label>
-        <input
-            type="text"
-            id="node-input-name"
-            placeholder="TaHoma Scenario Control"
-        >
-    </div>
+  <div class="form-row">
+      <label for="node-input-name">
+          <i class="icon-tag"></i> Name
+      </label>
+      <input
+          type="text"
+          id="node-input-name"
+          placeholder="TaHoma Scenario Control"
+      >
+  </div>
 
-    <div class="form-row">
-        <label for="node-input-cloudConfig">
-            <i class="icon-tag"></i> TaHoma Cloud
-        </label>
-        <input type="text" id="node-input-cloudConfig">
-    </div>
+  <div class="form-row">
+      <label for="node-input-cloudConfig">
+          <i class="icon-tag"></i> TaHoma Cloud
+      </label>
+      <input type="text" id="node-input-cloudConfig">
+  </div>
 
-    <div class="form-row">
-        <label for="node-input-scenarioId">
-            <i class="icon-tag"></i> Scenario
-        </label>
-        <select
-            id="node-input-scenarioId"
-            style="width: 70%;"
-        >
-            <option value="">
-                Use msg.payload.scenarioId (dynamic)
-            </option>
-        </select>
-    </div>
+  <div class="form-row">
+      <label for="node-input-scenarioId">
+          <i class="icon-tag"></i> Scenario
+      </label>
+      <select
+          id="node-input-scenarioId"
+          style="width: 70%;"
+      >
+          <option value="">
+              Use msg.payload.scenarioId (dynamic)
+          </option>
+      </select>
+  </div>
 
-    <div class="form-row">
-        <label>&nbsp;</label>
-        <button
-            type="button"
-            id="node-input-refresh-scenarios"
-            class="editor-button"
-        >
-            <i class="fa fa-refresh"></i> Refresh scenarios
-        </button>
-    </div>
+  <div class="form-row">
+      <label>&nbsp;</label>
+      <button
+          type="button"
+          id="node-input-refresh-scenarios"
+          class="editor-button"
+      >
+          <i class="fa fa-refresh"></i> Refresh scenarios
+      </button>
+  </div>
 
-    <div class="form-tips">
-        Select an existing TaHoma scenario or leave the selection
-        empty to provide the scenario ID dynamically through
-        <code>msg.payload</code> or <code>msg.payload.scenarioId</code>.
-    </div>
-
+  <div class="form-tips">
+      Select an existing TaHoma scenario or leave the selection
+      empty to provide the scenario ID dynamically through
+      <code>msg.payload</code> or <code>msg.payload.scenarioId</code>.
+  </div>
 </script>
 
 <script type="text/x-red" data-help-name="tahoma-scenario-control">
 
-    <p>
-        Executes an existing Somfy TaHoma scenario through the
-        Somfy Cloud API.
-    </p>
+      <p>
+          Executes an existing Somfy TaHoma scenario through the
+          Somfy Cloud API.
+      </p>
 
-    <p>
-        The node connects to your configured TaHoma Cloud account,
-        authenticates and requests execution of the selected scenario.
-    </p>
+      <p>
+          The node connects to your configured TaHoma Cloud account,
+          authenticates and requests execution of the selected scenario.
+      </p>
 
-    <h3>Configuration</h3>
+      <h3>Configuration</h3>
 
-    <dl class="message-properties">
+      <dl class="message-properties">
 
-        <dt>TaHoma Cloud
-            <span class="property-type">configuration</span>
-        </dt>
-        <dd>
-            Select the TaHoma Cloud configuration containing your
-            Somfy Cloud credentials.
-        </dd>
+          <dt>TaHoma Cloud
+              <span class="property-type">configuration</span>
+          </dt>
+          <dd>
+              Select the TaHoma Cloud configuration containing your
+              Somfy Cloud credentials.
+          </dd>
 
-        <dt>Scenario
-            <span class="property-type">string</span>
-        </dt>
-        <dd>
-            Select an existing scenario retrieved from your
-            TaHoma Cloud account.
-        </dd>
+          <dt>Scenario
+              <span class="property-type">string</span>
+          </dt>
+          <dd>
+              Select an existing scenario retrieved from your
+              TaHoma Cloud account.
+          </dd>
 
-        <dt>Name
-            <span class="property-type">string</span>
-        </dt>
-        <dd>
-            Optional node name.
-        </dd>
+          <dt>Name
+              <span class="property-type">string</span>
+          </dt>
+          <dd>
+              Optional node name.
+          </dd>
 
-    </dl>
+      </dl>
 
-    <p>
-        Use <b>Refresh scenarios</b> to retrieve the latest scenarios
-        available in your TaHoma Cloud account.
-    </p>
+      <p>
+          Use <b>Refresh scenarios</b> to retrieve the latest scenarios
+          available in your TaHoma Cloud account.
+      </p>
 
-    <h3>Inputs</h3>
+      <h3>Inputs</h3>
 
-    <p>
-        Any incoming message triggers scenario execution.
-    </p>
+      <p>
+          Any incoming message triggers scenario execution.
+      </p>
 
-    <dl class="message-properties">
+      <dl class="message-properties">
 
-        <dt>msg.payload
-            <span class="property-type">string | object</span>
-        </dt>
-        <dd>
-            Optionally provide a scenario identifier dynamically.
-        </dd>
+          <dt>msg.payload
+              <span class="property-type">string | object</span>
+          </dt>
+          <dd>
+              Optionally provide a scenario identifier dynamically.
+          </dd>
 
-        <dt>msg.payload.scenarioId
-            <span class="property-type">string</span>
-        </dt>
-        <dd>
-            Scenario identifier to execute when using dynamic selection.
-        </dd>
+          <dt>msg.payload.scenarioId
+              <span class="property-type">string</span>
+          </dt>
+          <dd>
+              Scenario identifier to execute when using dynamic selection.
+          </dd>
 
-    </dl>
+      </dl>
 
-    <h3>Scenario selection priority</h3>
+      <h3>Scenario selection priority</h3>
 
-    <ol>
-        <li>
-            If <code>msg.payload</code> is a string, it is used
-            as the scenario identifier.
-        </li>
-        <li>
-            Otherwise, if <code>msg.payload.scenarioId</code> is
-            a string, that value is used.
-        </li>
-        <li>
-            Otherwise, the scenario configured in the node is used.
-        </li>
-    </ol>
+      <ol>
+          <li>
+              If <code>msg.payload</code> is a string, it is used
+              as the scenario identifier.
+          </li>
+          <li>
+              Otherwise, if <code>msg.payload.scenarioId</code> is
+              a string, that value is used.
+          </li>
+          <li>
+              Otherwise, the scenario configured in the node is used.
+          </li>
+      </ol>
 
-    <p>
-        If no scenario identifier is available, the node reports an error.
-    </p>
+      <p>
+          If no scenario identifier is available, the node reports an error.
+      </p>
 
-    <h3>Outputs</h3>
+      <h3>Outputs</h3>
 
-    <p>
-        On successful execution request, the original message is forwarded
-        with its payload replaced by the execution result.
-    </p>
+      <p>
+          On successful execution request, the original message is forwarded
+          with its payload replaced by the execution result.
+      </p>
 
-    <dl class="message-properties">
+      <dl class="message-properties">
 
-        <dt>msg.payload.scenarioId
-            <span class="property-type">string</span>
-        </dt>
-        <dd>
-            Identifier of the scenario submitted for execution.
-        </dd>
+          <dt>msg.payload.scenarioId
+              <span class="property-type">string</span>
+          </dt>
+          <dd>
+              Identifier of the scenario submitted for execution.
+          </dd>
 
-        <dt>msg.payload.execId
-            <span class="property-type">string</span>
-        </dt>
-        <dd>
-            Execution identifier returned by the Somfy Cloud API.
-        </dd>
+          <dt>msg.payload.execId
+              <span class="property-type">string</span>
+          </dt>
+          <dd>
+              Execution identifier returned by the Somfy Cloud API.
+          </dd>
 
-    </dl>
+      </dl>
 
-    <h3>Status indicators</h3>
+      <h3>Status indicators</h3>
 
-    <ul>
-        <li>
-            <b>Yellow:</b> Connecting to Somfy Cloud.
-        </li>
-        <li>
-            <b>Green:</b> Scenario execution requested successfully.
-        </li>
-        <li>
-            <b>Red:</b> Scenario execution failed.
-        </li>
-    </ul>
+      <ul>
+          <li>
+              <b>Yellow:</b> Connecting to Somfy Cloud.
+          </li>
+          <li>
+              <b>Green:</b> Scenario execution requested successfully.
+          </li>
+          <li>
+              <b>Red:</b> Scenario execution failed.
+          </li>
+      </ul>
 
-    <h3>Important</h3>
+      <h3>Important</h3>
 
-    <p>
-        A successful response indicates that the scenario execution
-        was requested by the Somfy Cloud API. It does not necessarily
-        mean that all devices have completed their actions.
-    </p>
+      <p>
+          A successful response indicates that the scenario execution
+          was requested by the Somfy Cloud API. It does not necessarily
+          mean that all devices have completed their actions.
+      </p>
 
-    <p>
-        The node logs out of the Somfy Cloud API after processing
-        the request.
-    </p>
+      <p>
+          The node logs out of the Somfy Cloud API after processing
+          the request.
+      </p>
 
-    <h3>Example: Dynamic scenario execution</h3>
+      <h3>Example: Dynamic scenario execution</h3>
 
-    <pre>
-msg.payload = {
-    scenarioId: "YOUR_SCENARIO_ID"
-};
+      <pre>
+  msg.payload = {
+      scenarioId: "YOUR_SCENARIO_ID"
+  };
 
-return msg;
-    </pre>
+  return msg;
+      </pre>
 
-    <h3>Example: Configured scenario execution</h3>
+      <h3>Example: Configured scenario execution</h3>
 
-    <p>
-        Select a scenario in the node configuration and inject
-        any message to trigger its execution.
-    </p>
-
+      <p>
+          Select a scenario in the node configuration and inject
+          any message to trigger its execution.
+      </p>
 </script>

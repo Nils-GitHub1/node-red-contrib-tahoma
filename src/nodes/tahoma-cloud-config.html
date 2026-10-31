@@ -1,67 +1,133 @@
+
 <script type="text/javascript">
   RED.nodes.registerType('tahoma-cloud-config', {
     category: 'config',
+
     defaults: {
       name: { value: '', required: true },
       region: { value: 'europe', required: true },
     },
+
     credentials: {
       userId: { type: 'text', required: true },
       userPassword: { type: 'password', required: true },
     },
+
     label: function () {
       return this.name || 'TaHoma Cloud';
     },
+
     oneditprepare: function () {
-      $('#node-config-input-region').val(this.region || 'europe');
+      const configNode = this;
 
-      $('#node-config-input-cloud-test').on('click', function () {
-        const button = $(this);
-        const userId = $('#node-config-input-userId').val();
-        const userPassword = $('#node-config-input-userPassword').val();
-        const region = $('#node-config-input-region').val();
+      $('#node-config-input-region').val(
+        this.region || 'europe',
+      );
 
-        if (!userId || !userPassword) {
-          $('#node-config-cloud-error')
-            .text('Please enter your Somfy email and password.')
-            .show();
-          return;
-        }
+      $('#node-config-input-cloud-test')
+        .off('click')
+        .on('click', function () {
+          const button = $(this);
 
-        button.prop('disabled', true).text('Connecting...');
-        $('#node-config-cloud-result').hide();
-        $('#node-config-cloud-error').hide();
+          const userId = $('#node-config-input-userId').val();
+          const enteredPassword = $(
+            '#node-config-input-userPassword',
+          ).val();
 
-        $.ajax({
-          url:
-            window.location.protocol +
-            '//' +
-            window.location.host +
-            window.location.pathname +
-            'somfy/cloud/test',
-          method: 'POST',
-          data: { userId, userPassword, region },
-          success: function (response) {
-            $('#node-config-cloud-result')
-              .text(
-                'Connection successful! Found ' +
-                  response.scenarioCount +
-                  ' scenario(s).',
-              )
-              .show();
-          },
-          error: function () {
+          const region = $('#node-config-input-region').val();
+
+          // Node-RED does not expose stored password credentials
+          // to the editor. The backend will retrieve them using
+          // the configuration node ID.
+          const hasStoredPassword = !!(
+            configNode.credentials &&
+            configNode.credentials.has_userPassword
+          );
+
+          // Never submit Node-RED's password placeholder.
+          const userPassword =
+            enteredPassword &&
+            enteredPassword !== '__PWRD__'
+              ? enteredPassword
+              : '';
+
+          if (!userId) {
             $('#node-config-cloud-error')
-              .text(
-                'Connection failed. Check your credentials, region and internet connection.',
-              )
+              .text('Please enter your Somfy email.')
               .show();
-          },
-          complete: function () {
-            button.prop('disabled', false).text('Test Cloud Connection');
-          },
+
+            return;
+          }
+
+          if (!userPassword && !hasStoredPassword) {
+            $('#node-config-cloud-error')
+              .text('Please enter your Somfy password.')
+              .show();
+
+            return;
+          }
+
+          button.prop('disabled', true).text('Connecting...');
+
+          $('#node-config-cloud-result').hide();
+          $('#node-config-cloud-error').hide();
+
+          $.ajax({
+            url:
+              window.location.protocol +
+              '//' +
+              window.location.host +
+              window.location.pathname +
+              'somfy/cloud/test',
+
+            method: 'POST',
+
+            data: {
+              configNodeId: configNode.id,
+              userId: userId,
+              userPassword: userPassword,
+              region: region,
+            },
+
+            success: function (response) {
+              $('#node-config-cloud-result')
+                .text(
+                  'Connection successful! Found ' +
+                    response.scenarioCount +
+                    ' scenario(s).',
+                )
+                .show();
+            },
+
+            error: function (xhr) {
+              let message = 'Unknown connection error';
+
+              if (
+                xhr.responseJSON &&
+                xhr.responseJSON.details
+              ) {
+                message = xhr.responseJSON.details;
+              } else if (
+                xhr.responseJSON &&
+                xhr.responseJSON.error
+              ) {
+                message = xhr.responseJSON.error;
+              } else if (xhr.statusText) {
+                message = xhr.status + ' - ' + xhr.statusText;
+              }
+
+              $('#node-config-cloud-error')
+                .text('Connection failed: ' + message)
+                .show();
+            },
+
+            complete: function () {
+              button
+                .prop('disabled', false)
+                .text('Test Cloud Connection');
+            },
+          });
         });
-      });
     },
   });
 </script>
@@ -71,21 +137,32 @@
     <label for="node-config-input-name">
       <i class="fa fa-tag"></i> Connection name
     </label>
-    <input type="text" id="node-config-input-name" placeholder="TaHoma Cloud">
+    <input
+      type="text"
+      id="node-config-input-name"
+      placeholder="TaHoma Cloud"
+    >
   </div>
 
   <div class="form-row">
     <label for="node-config-input-userId">
       <i class="fa fa-user"></i> Somfy email
     </label>
-    <input type="text" id="node-config-input-userId">
+    <input
+      type="text"
+      id="node-config-input-userId"
+    >
   </div>
 
   <div class="form-row">
     <label for="node-config-input-userPassword">
       <i class="fa fa-lock"></i> Password
     </label>
-    <input type="password" id="node-config-input-userPassword">
+    <input
+      type="password"
+      id="node-config-input-userPassword"
+      autocomplete="new-password"
+    >
   </div>
 
   <div class="form-row">
@@ -100,7 +177,11 @@
   </div>
 
   <div class="form-row">
-    <button type="button" id="node-config-input-cloud-test">
+    <button
+      type="button"
+      id="node-config-input-cloud-test"
+      class="red-ui-button"
+    >
       Test Cloud Connection
     </button>
   </div>
@@ -123,6 +204,7 @@
 
 <script type="text/html" data-help-name="tahoma-cloud-config">
   <p>Configuration for Somfy TaHoma Cloud scenario control.</p>
+
   <p>
     Select the regional server corresponding to your Somfy account.
     Existing scenarios created in the official TaHoma application

@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+
 import { SomfyApi } from './somfy-api';
 
 export interface ISomfyActionGroup {
@@ -15,25 +16,34 @@ export class SomfyCloudApi {
   private readonly userId: string;
   private readonly userPassword: string;
   private readonly axiosInstance: AxiosInstance;
+
   private sessionId: string | null = null;
 
   constructor(userId: string, userPassword: string, serverUrl: string) {
+    if (!userId || !userPassword || !serverUrl) {
+      throw new Error('Somfy Cloud: missing credentials or server URL');
+    }
+
     this.userId = userId;
     this.userPassword = userPassword;
-    this.serverUrl = serverUrl.replace(/\/$/, '');
+    this.serverUrl = serverUrl.replace(/\/+$/, '');
 
     this.axiosInstance = axios.create({
       timeout: 20000,
+      headers: {
+        Accept: 'application/json',
+      },
     });
   }
 
   /**
    * Authenticate against the Somfy Overkiz cloud.
    *
-   * Special characters in the username and password are handled
-   * by SomfyApi.getSessionId() using URLSearchParams.
+   * Uses SomfyApi.getSessionId() to authenticate and retrieve
+   * the JSESSIONID cookie.
    */
   public async login(): Promise<void> {
+    // Clear any previous session.
     this.sessionId = null;
 
     try {
@@ -54,20 +64,16 @@ export class SomfyCloudApi {
     } catch (error) {
       this.sessionId = null;
 
-      if (error instanceof Error) {
-        throw new Error(`Somfy Cloud authentication failed: ${error.message}`);
-      }
-
-      throw new Error('Somfy Cloud authentication failed');
+      // Preserve the original error, including Axios HTTP details.
+      throw error;
     }
   }
 
   /**
    * Check whether the current session is still valid.
    *
-   * Note: this checks both authentication and access to actionGroups.
-   * A permission error may therefore return false even when login
-   * itself was successful.
+   * This method checks both authentication and access to
+   * the actionGroups endpoint.
    */
   public async isAuthenticated(): Promise<boolean> {
     if (!this.sessionId) {
@@ -91,11 +97,30 @@ export class SomfyCloudApi {
       method: 'GET',
     });
 
-    if (!Array.isArray(response.data)) {
-      throw new Error('Invalid action groups response from Somfy Cloud');
+    const actionGroups = response.data;
+
+    if (!Array.isArray(actionGroups)) {
+      throw new Error(
+        'Invalid action groups response from Somfy Cloud: ' +
+          'expected an array',
+      );
     }
 
-    return response.data as ISomfyActionGroup[];
+    // Validate the essential properties of each scenario.
+    for (const group of actionGroups) {
+      if (
+        !group ||
+        typeof group.oid !== 'string' ||
+        typeof group.label !== 'string'
+      ) {
+        throw new Error(
+          'Invalid action group received from Somfy Cloud: ' +
+            'missing oid or label',
+        );
+      }
+    }
+
+    return actionGroups as ISomfyActionGroup[];
   }
 
   /**
@@ -113,8 +138,12 @@ export class SomfyCloudApi {
       method: 'POST',
     });
 
-    if (!response.data || !response.data.execId) {
-      throw new Error('Invalid scenario execution response');
+    if (
+      !response.data ||
+      typeof response.data.execId !== 'string' ||
+      !response.data.execId
+    ) {
+      throw new Error('Invalid scenario execution response from Somfy Cloud');
     }
 
     return response.data as ISomfyExecutionResponse;
@@ -122,6 +151,7 @@ export class SomfyCloudApi {
 
   /**
    * Clear the local cloud session.
+   *
    * This does not revoke the session on the Somfy server.
    */
   public logout(): void {
@@ -130,6 +160,9 @@ export class SomfyCloudApi {
 
   /**
    * Perform an authenticated cloud request.
+   *
+   * Axios errors are deliberately preserved so that callers
+   * can inspect HTTP status, response data and error codes.
    */
   private request(options: AxiosRequestConfig): Promise<AxiosResponse> {
     if (!this.sessionId) {
@@ -144,21 +177,6 @@ export class SomfyCloudApi {
       },
     };
 
-    return this.axiosInstance.request(config).catch((error) => {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const responseData = error.response?.data;
-
-        throw new Error(
-          `Somfy Cloud API request failed` +
-            (status ? ` (HTTP ${status})` : '') +
-            (responseData
-              ? `: ${JSON.stringify(responseData)}`
-              : error.message),
-        );
-      }
-
-      throw error;
-    });
+    return this.axiosInstance.request(config);
   }
 }

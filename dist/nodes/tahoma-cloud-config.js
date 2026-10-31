@@ -42,6 +42,41 @@ var REGIONAL_SERVERS = {
     america: 'https://ha401-1.overkiz.com/enduser-mobile-web/enduserAPI',
     oceania: 'https://ha201-1.overkiz.com/enduser-mobile-web/enduserAPI',
 };
+/**
+ * Extract useful diagnostic information from an unknown error.
+ * Never include credentials or session information in logs.
+ */
+var getErrorDetails = function (error) {
+    var _a;
+    var err = error;
+    return {
+        message: (err === null || err === void 0 ? void 0 : err.message) || 'Unknown error',
+        code: err === null || err === void 0 ? void 0 : err.code,
+        status: (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.status,
+    };
+};
+/**
+ * Return an appropriate HTTP status for an API error.
+ */
+var getHttpStatus = function (error, fallback) {
+    var details = getErrorDetails(error);
+    if (details.status && details.status >= 400 && details.status <= 599) {
+        return details.status;
+    }
+    return fallback;
+};
+/**
+ * Safely close an API session without masking the original error.
+ */
+var safeLogout = function (api) {
+    try {
+        api.logout();
+    }
+    catch (error) {
+        var details = getErrorDetails(error);
+        console.warn("[TaHoma Cloud] Logout failed: ".concat(details.message));
+    }
+};
 module.exports = function (RED) {
     RED.nodes.registerType('tahoma-cloud-config', function (props) {
         RED.nodes.createNode(this, props);
@@ -61,77 +96,116 @@ module.exports = function (RED) {
             userPassword: { type: 'password' },
         },
     });
+    /**
+     * Test Somfy Cloud connection.
+     *
+     * Authentication and scenario discovery are reported separately
+     * to make troubleshooting easier.
+     */
     RED.httpAdmin.post('/somfy/cloud/test', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
-        var _a, userId, userPassword, region, serverUrl, api, actionGroups, _b;
-        return __generator(this, function (_c) {
-            switch (_c.label) {
+        var _a, configNodeId, submittedUserId, submittedPassword, region, serverUrl, configNode, storedCredentials, userId, userPassword, api, authenticated, actionGroups, error_1, details, status_1;
+        return __generator(this, function (_b) {
+            switch (_b.label) {
                 case 0:
-                    _a = request.body, userId = _a.userId, userPassword = _a.userPassword, region = _a.region;
+                    _a = request.body || {}, configNodeId = _a.configNodeId, submittedUserId = _a.userId, submittedPassword = _a.userPassword, region = _a.region;
                     serverUrl = REGIONAL_SERVERS[region];
+                    configNode = configNodeId
+                        ? RED.nodes.getNode(configNodeId)
+                        : null;
+                    storedCredentials = configNode === null || configNode === void 0 ? void 0 : configNode.credentials;
+                    userId = submittedUserId || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userId);
+                    userPassword = submittedPassword || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userPassword);
                     if (!userId || !userPassword || !serverUrl) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
                         response.json({
+                            success: false,
                             error: 'Missing credentials or invalid region',
                         });
                         return [2 /*return*/];
                     }
                     api = new somfy_cloud_api_1.SomfyCloudApi(userId, userPassword, serverUrl);
-                    _c.label = 1;
+                    authenticated = false;
+                    _b.label = 1;
                 case 1:
-                    _c.trys.push([1, 4, 5, 6]);
+                    _b.trys.push([1, 4, 5, 6]);
+                    // Step 1: Authenticate with Somfy Cloud.
                     return [4 /*yield*/, api.login()];
                 case 2:
-                    _c.sent();
+                    // Step 1: Authenticate with Somfy Cloud.
+                    _b.sent();
+                    authenticated = true;
+                    RED.log.info("[TaHoma Cloud Test] Authentication successful (region: ".concat(region, ")"));
                     return [4 /*yield*/, api.getActionGroups()];
                 case 3:
-                    actionGroups = _c.sent();
+                    actionGroups = _b.sent();
+                    RED.log.info("[TaHoma Cloud Test] Successfully retrieved ".concat(actionGroups.length, " scenarios"));
                     response.json({
                         success: true,
+                        authenticated: true,
                         scenarioCount: actionGroups.length,
                     });
                     return [3 /*break*/, 6];
                 case 4:
-                    _b = _c.sent();
-                    response.status(http_response_enum_1.HttpResponse.UNAUTHORIZED);
+                    error_1 = _b.sent();
+                    details = getErrorDetails(error_1);
+                    RED.log.error("[TaHoma Cloud Test] ".concat(authenticated ? 'Scenario discovery' : 'Authentication', " failed. ") +
+                        "Message: ".concat(details.message, ", ") +
+                        "HTTP status: ".concat(details.status || 'N/A', ", ") +
+                        "Code: ".concat(details.code || 'N/A'));
+                    status_1 = getHttpStatus(error_1, authenticated ? http_response_enum_1.HttpResponse.SERVER_ERROR : http_response_enum_1.HttpResponse.UNAUTHORIZED);
+                    response.status(status_1);
                     response.json({
                         success: false,
-                        error: 'Cloud authentication or scenario discovery failed',
+                        authenticated: authenticated,
+                        error: authenticated
+                            ? 'Authentication successful, but scenario discovery failed'
+                            : 'Somfy Cloud authentication failed',
+                        details: details.message,
+                        code: details.code,
+                        httpStatus: details.status,
                     });
                     return [3 /*break*/, 6];
                 case 5:
-                    api.logout();
+                    safeLogout(api);
                     return [7 /*endfinally*/];
                 case 6: return [2 /*return*/];
             }
         });
     }); });
+    /**
+     * Retrieve scenarios for an existing TaHoma Cloud configuration node.
+     */
     RED.httpAdmin.get('/somfy/cloud/:account/scenarios', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
-        var configNode, createApi, api, actionGroups, _a;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
+        var configNode, createApi, api, actionGroups, error_2, details;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
                 case 0:
                     configNode = RED.nodes.getNode(request.params.account);
                     if (!configNode) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
-                        response.json({ error: 'TaHoma Cloud configuration not found' });
+                        response.json({
+                            error: 'TaHoma Cloud configuration not found',
+                        });
                         return [2 /*return*/];
                     }
                     createApi = configNode['createApi'];
                     if (!createApi) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
-                        response.json({ error: 'Cloud credentials are missing' });
+                        response.json({
+                            error: 'Cloud credentials are missing',
+                        });
                         return [2 /*return*/];
                     }
                     api = createApi();
-                    _b.label = 1;
+                    _a.label = 1;
                 case 1:
-                    _b.trys.push([1, 4, 5, 6]);
+                    _a.trys.push([1, 4, 5, 6]);
                     return [4 /*yield*/, api.login()];
                 case 2:
-                    _b.sent();
+                    _a.sent();
                     return [4 /*yield*/, api.getActionGroups()];
                 case 3:
-                    actionGroups = _b.sent();
+                    actionGroups = _a.sent();
                     response.json({
                         scenarios: actionGroups.map(function (group) { return ({
                             id: group.oid,
@@ -140,14 +214,22 @@ module.exports = function (RED) {
                     });
                     return [3 /*break*/, 6];
                 case 4:
-                    _a = _b.sent();
-                    response.status(http_response_enum_1.HttpResponse.SERVER_ERROR);
+                    error_2 = _a.sent();
+                    details = getErrorDetails(error_2);
+                    RED.log.error("[TaHoma Cloud] Unable to retrieve scenarios. " +
+                        "Message: ".concat(details.message, ", ") +
+                        "HTTP status: ".concat(details.status || 'N/A', ", ") +
+                        "Code: ".concat(details.code || 'N/A'));
+                    response.status(getHttpStatus(error_2, http_response_enum_1.HttpResponse.SERVER_ERROR));
                     response.json({
                         error: 'Unable to retrieve Somfy scenarios',
+                        details: details.message,
+                        code: details.code,
+                        httpStatus: details.status,
                     });
                     return [3 /*break*/, 6];
                 case 5:
-                    api.logout();
+                    safeLogout(api);
                     return [7 /*endfinally*/];
                 case 6: return [2 /*return*/];
             }

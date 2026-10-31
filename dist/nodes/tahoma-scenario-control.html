@@ -1,209 +1,241 @@
-
 <script type="text/javascript">
-RED.nodes.registerType('tahoma-scenario-control', {
-    category: 'function',
-    color: '#E2D96E',
+    RED.nodes.registerType('tahoma-scenario-control', {
+        category: 'function',
+        color: '#E2D96E',
 
-    defaults: {
-        cloudConfig: {
-            value: '',
-            type: 'tahoma-cloud-config',
-            required: true,
+        defaults: {
+            cloudConfig: {
+                value: '',
+                type: 'tahoma-cloud-config',
+                required: true,
+            },
+            scenarioId: {
+                value: '',
+            },
+            name: {
+                value: '',
+            },
         },
-        scenarioId: {
-            value: '',
+
+        inputs: 1,
+        outputs: 1,
+        icon: 'bridge-dash.png',
+
+        label: function () {
+            return this.name || 'TaHoma Scenario Control';
         },
-        name: {
-            value: '',
+
+        labelStyle: function () {
+            return this.name ? 'node_label_italic' : '';
         },
-    },
 
-    inputs: 1,
-    outputs: 1,
-    icon: 'bridge-dash.png',
+        oneditprepare: function () {
+            const scenarioSelect = $('#node-input-scenarioId');
+            const refreshButton = $('#node-input-refresh-scenarios');
+            const cloudConfigInput = $('#node-input-cloudConfig');
 
-    label: function () {
-        return this.name || 'TaHoma Scenario Control';
-    },
+            let activeRequest = null;
+            let requestId = 0;
 
-    labelStyle: function () {
-        return this.name ? 'node_label_italic' : '';
-    },
+            // Keep the scenario ID saved in the Node-RED flow.
+            let configuredScenarioId = this.scenarioId || '';
 
-    oneditprepare: function () {
-        const scenarioSelect = $('#node-input-scenarioId');
-        const refreshButton = $('#node-input-refresh-scenarios');
-        const cloudConfigInput = $('#node-input-cloudConfig');
+            function addOption(value, label) {
+                // Avoid duplicate options.
+                const exists = scenarioSelect
+                    .find('option')
+                    .filter(function () {
+                        return String($(this).val()) === String(value);
+                    }).length > 0;
 
-        let activeRequest = null;
-        let requestId = 0;
-
-        // Keep the scenario ID saved in the Node-RED flow.
-        let configuredScenarioId = this.scenarioId || '';
-
-        function addOption(value, label) {
-            scenarioSelect.append(
-                $('<option>')
-                    .val(value)
-                    .text(label)
-            );
-        }
-
-        function loadScenarios(preserveSelection) {
-            const configId = cloudConfigInput.val();
-
-            // Preserve the current selection or the saved scenario ID.
-            const selectedScenario = preserveSelection
-                ? (scenarioSelect.val() || configuredScenarioId)
-                : '';
-
-            // Cancel previous requests and invalidate their responses.
-            requestId++;
-
-            const currentRequestId = requestId;
-
-            if (activeRequest) {
-                activeRequest.abort();
-                activeRequest = null;
+                if (!exists) {
+                    scenarioSelect.append(
+                        $('<option>')
+                            .val(value)
+                            .text(label)
+                    );
+                }
             }
 
-            scenarioSelect
-                .empty()
-                .append(
-                    $('<option>')
-                        .val('')
-                        .text('Use msg.payload.scenarioId (dynamic)')
+            function loadScenarios(preserveSelection) {
+                const configId = cloudConfigInput.val();
+
+                // Preserve the current selection or saved scenario ID.
+                const selectedScenario = preserveSelection
+                    ? String(
+                        scenarioSelect.val() ||
+                        configuredScenarioId ||
+                        ''
+                    )
+                    : '';
+
+                // Cancel previous requests and invalidate their responses.
+                requestId++;
+
+                const currentRequestId = requestId;
+
+                if (activeRequest) {
+                    activeRequest.abort();
+                    activeRequest = null;
+                }
+
+                scenarioSelect
+                    .empty()
+                    .append(
+                        $('<option>')
+                            .val('')
+                            .text('Use msg.payload.scenarioId (dynamic)')
+                    );
+
+                if (!configId || configId === '_ADD_') {
+                    // Preserve the saved scenario even without a
+                    // currently selected cloud configuration.
+                    if (selectedScenario) {
+                        addOption(
+                            selectedScenario,
+                            'Previously selected scenario'
+                        );
+                        scenarioSelect.val(selectedScenario);
+                        configuredScenarioId = selectedScenario;
+                    }
+
+                    scenarioSelect.prop('disabled', false);
+                    refreshButton.prop('disabled', true);
+
+                    return;
+                }
+
+                scenarioSelect.prop('disabled', true);
+                refreshButton.prop('disabled', true);
+
+                const request = $.getJSON(
+                    '/somfy/cloud/' +
+                    encodeURIComponent(configId) +
+                    '/scenarios'
                 );
 
-            if (!configId || configId === '_ADD_') {
-                scenarioSelect.prop('disabled', false);
-                refreshButton.prop('disabled', true);
-                return;
-            }
+                activeRequest = request;
 
-            scenarioSelect.prop('disabled', true);
-            refreshButton.prop('disabled', true);
-
-            const request = $.getJSON(
-                '/somfy/cloud/' +
-                encodeURIComponent(configId) +
-                '/scenarios'
-            );
-
-            activeRequest = request;
-
-            request
-                .done(function (response) {
-                    // Ignore outdated requests.
-                    if (currentRequestId !== requestId) {
-                        return;
-                    }
-
-                    if (
-                        !response ||
-                        !Array.isArray(response.scenarios)
-                    ) {
-                        addOption('', 'Invalid scenario response');
-                        return;
-                    }
-
-                    // Populate available scenarios.
-                    response.scenarios.forEach(function (scenario) {
-                        if (
-                            !scenario ||
-                            typeof scenario.id !== 'string' ||
-                            typeof scenario.name !== 'string'
-                        ) {
+                request
+                    .done(function (response) {
+                        // Ignore outdated requests.
+                        if (currentRequestId !== requestId) {
                             return;
                         }
 
-                        addOption(scenario.id, scenario.name);
-                    });
-
-                    // Restore the saved scenario even if it is
-                    // temporarily missing from the cloud response.
-                    if (selectedScenario) {
-                        const exists = scenarioSelect
-                            .find('option')
-                            .filter(function () {
-                                return $(this).val() === selectedScenario;
-                            })
-                            .length > 0;
-
-                        if (!exists) {
-                            addOption(
-                                selectedScenario,
-                                'Previously selected scenario (not returned by cloud)'
-                            );
+                        if (
+                            !response ||
+                            !Array.isArray(response.scenarios)
+                        ) {
+                            addOption('', 'Invalid scenario response');
+                            return;
                         }
-                    }
 
-                    // Restore the selection AFTER populating the dropdown.
-                    scenarioSelect.val(selectedScenario || '');
+                        // Populate available scenarios.
+                        response.scenarios.forEach(function (scenario) {
+                            if (
+                                !scenario ||
+                                typeof scenario.id !== 'string' ||
+                                typeof scenario.name !== 'string'
+                            ) {
+                                return;
+                            }
 
-                    // Keep the restored selection for subsequent refreshes.
-                    configuredScenarioId = selectedScenario || '';
+                            addOption(scenario.id, scenario.name);
+                        });
 
-                    if (response.scenarios.length === 0) {
-                        addOption('', 'No scenarios found');
-                    }
-                })
-                .fail(function (xhr, status) {
-                    if (currentRequestId !== requestId) {
-                        return;
-                    }
-
-                    if (status !== 'abort') {
-                        addOption(
-                            '',
-                            'Unable to retrieve scenarios. Check cloud configuration.'
-                        );
-
-                        // Preserve the previously saved scenario.
+                        // Restore the saved scenario even if it is
+                        // temporarily missing from the cloud response.
                         if (selectedScenario) {
+                            const exists = scenarioSelect
+                                .find('option')
+                                .filter(function () {
+                                    return String($(this).val()) ===
+                                        selectedScenario;
+                                })
+                                .length > 0;
+
+                            if (!exists) {
+                                addOption(
+                                    selectedScenario,
+                                    'Previously selected scenario (not returned by cloud)'
+                                );
+                            }
+                        }
+
+                        // Restore the selection AFTER populating the dropdown.
+                        scenarioSelect.val(selectedScenario || '');
+
+                        // Keep the restored selection for subsequent refreshes.
+                        configuredScenarioId = selectedScenario || '';
+
+                        if (response.scenarios.length === 0) {
+                            addOption('', 'No scenarios found');
+                        }
+                    })
+                    .fail(function (xhr, status) {
+                        if (currentRequestId !== requestId) {
+                            return;
+                        }
+
+                        if (status !== 'abort') {
                             addOption(
-                                selectedScenario,
-                                'Previously selected scenario'
+                                '',
+                                'Unable to retrieve scenarios. Check cloud configuration.'
                             );
 
-                            scenarioSelect.val(selectedScenario);
-                            configuredScenarioId = selectedScenario;
+                            // Preserve the previously saved scenario.
+                            if (selectedScenario) {
+                                addOption(
+                                    selectedScenario,
+                                    'Previously selected scenario'
+                                );
+
+                                scenarioSelect.val(selectedScenario);
+                                configuredScenarioId = selectedScenario;
+                            }
                         }
-                    }
-                })
-                .always(function () {
-                    if (currentRequestId !== requestId) {
-                        return;
-                    }
+                    })
+                    .always(function () {
+                        if (currentRequestId !== requestId) {
+                            return;
+                        }
 
-                    activeRequest = null;
+                        activeRequest = null;
 
-                    scenarioSelect.prop('disabled', false);
-                    refreshButton.prop('disabled', false);
-                });
-        }
+                        scenarioSelect.prop('disabled', false);
+                        refreshButton.prop('disabled', false);
+                    });
+            }
 
-        // Remember manual scenario selection changes.
-        scenarioSelect.on('change', function () {
-            configuredScenarioId = $(this).val() || '';
-        });
+            // Remember manual scenario selection changes.
+            scenarioSelect.on('change', function () {
+                configuredScenarioId = $(this).val() || '';
+            });
 
-        // Changing the cloud configuration resets the scenario.
-        cloudConfigInput.on('change', function () {
-            configuredScenarioId = '';
-            loadScenarios(false);
-        });
+            // Changing the cloud configuration resets the scenario.
+            cloudConfigInput.on('change', function () {
+                configuredScenarioId = '';
+                loadScenarios(false);
+            });
 
-        // Refresh scenarios while preserving the selection.
-        refreshButton.on('click', function (event) {
-            event.preventDefault();
+            // Refresh scenarios while preserving the selection.
+            refreshButton.on('click', function (event) {
+                event.preventDefault();
+                loadScenarios(true);
+            });
+
+            // Load scenarios and restore the saved selection.
             loadScenarios(true);
-        });
+        },
 
-        // Load scenarios and restore the saved selection.
-        loadScenarios(true);
-    },
-});
+        // Explicitly persist the selected scenario when saving the node.
+        oneditsave: function () {
+            this.scenarioId = String(
+                $('#node-input-scenarioId').val() || ''
+            );
+        },
+    });
 </script>
 
 <script type="text/x-red" data-template-name="tahoma-scenario-control">

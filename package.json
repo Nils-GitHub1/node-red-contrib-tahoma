@@ -35,7 +35,7 @@
   "scripts": {
     "build-windows": "mkdir .\\dist\\nodes && copy .\\src\\nodes\\*.html .\\dist\\nodes\\ && tsc",
     "build-linux": "mkdir -p dist/nodes/ && cp -a src/nodes/*.html dist/nodes/ && tsc",
-    "build": "mkdir -p dist/nodes/ && cp -a src/nodes/*.html dist/nodes/ && tsc",
+    "build": "node -e \"require('fs').mkdirSync('dist/nodes', { recursive: true }); require('fs').readdirSync('src/nodes').filter(f => f.endsWith('.html')).forEach(f => require('fs').copyFileSync('src/nodes/' + f, 'dist/nodes/' + f))\" && npx tsc",
     "watch": "tsc --watch",
     "execute": "npm run build && node-red",
     "lint": "eslint src/**/*.ts"

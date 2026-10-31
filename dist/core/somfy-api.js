@@ -1,4 +1,15 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -38,31 +49,43 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SomfyApi = void 0;
 var axios_1 = require("axios");
-var http_response_enum_1 = require("../enums/http-response.enum");
-var https = require("https");
+/**
+ * Default timeout for Somfy API requests.
+ */
+var API_TIMEOUT = 20000;
 var SomfyApi = /** @class */ (function () {
+    /**
+     * Initialize the Somfy API client.
+     */
     function SomfyApi(configNode) {
         var _this = this;
-        this.axiosInstance = axios_1.default.create({
-            httpsAgent: new https.Agent({
-                rejectUnauthorized: false,
-            }),
-        });
         this.configNode = configNode;
+        // Use Axios defaults, including normal HTTPS certificate validation.
+        this.axiosInstance = axios_1.default.create();
         this.axiosInstance.interceptors.request.use(function (config) {
-            config.headers['Authorization'] = "Bearer ".concat(_this.getAccessToken());
+            var accessToken = _this.getAccessToken();
+            config.headers = config.headers || {};
+            config.headers['Authorization'] = "Bearer ".concat(accessToken);
             return config;
         }, function (error) {
             return Promise.reject(error);
         });
     }
+    /**
+     * Authenticate against the Somfy / Overkiz API.
+     *
+     * Returns the JSESSIONID extracted from the response cookies.
+     */
     SomfyApi.getSessionId = function (userId, userPwd, somfyOverkizSrvUrl) {
         return __awaiter(this, void 0, void 0, function () {
-            var loginData, response, cookieHeader, cookies, sessionCookie, match, error_1, status_1, statusText;
+            var loginData, response, cookieHeader, cookies, sessionCookie, cookieValue, separatorIndex, sessionId, error_1, status_1, responseData, serverError;
             var _a, _b;
             return __generator(this, function (_c) {
                 switch (_c.label) {
                     case 0:
+                        if (!userId || !userPwd || !somfyOverkizSrvUrl) {
+                            throw new Error('Somfy login: missing credentials or server URL');
+                        }
                         loginData = new URLSearchParams({
                             userId: userId,
                             userPassword: userPwd,
@@ -71,14 +94,14 @@ var SomfyApi = /** @class */ (function () {
                     case 1:
                         _c.trys.push([1, 3, , 4]);
                         return [4 /*yield*/, (0, axios_1.default)({
-                                url: "".concat(somfyOverkizSrvUrl, "/login"),
+                                url: "".concat(somfyOverkizSrvUrl.replace(/\/+$/, ''), "/login"),
                                 method: 'POST',
                                 data: loginData.toString(),
                                 headers: {
                                     'Content-Type': 'application/x-www-form-urlencoded',
                                     Accept: 'application/json, text/plain, */*',
                                 },
-                                timeout: 20000,
+                                timeout: API_TIMEOUT,
                             })];
                     case 2:
                         response = _c.sent();
@@ -89,27 +112,36 @@ var SomfyApi = /** @class */ (function () {
                                 ? [cookieHeader]
                                 : [];
                         sessionCookie = cookies.find(function (cookie) {
-                            return /^JSESSIONID=/i.test(cookie.trim());
+                            return /^\s*JSESSIONID=/i.test(cookie);
                         });
                         if (!sessionCookie) {
                             throw new Error("Somfy login returned HTTP ".concat(response.status, ", ") +
-                                "but no JSESSIONID cookie was found. " +
+                                'but no JSESSIONID cookie was found. ' +
                                 "Content-Type: ".concat(response.headers['content-type'] || 'unknown', ". ") +
-                                "Cookies received: ".concat(cookies.map(function (c) { return c.split('=')[0]; }).join(', ') || 'none', "."));
+                                "Cookies received: ".concat(cookies.map(function (cookie) { return cookie.split('=')[0].trim(); }).join(', ') ||
+                                    'none', "."));
                         }
-                        match = sessionCookie.match(/^JSESSIONID=([^;]+)/i);
-                        if (!match || !match[1]) {
+                        cookieValue = sessionCookie.trim().split(';')[0];
+                        separatorIndex = cookieValue.indexOf('=');
+                        sessionId = separatorIndex >= 0
+                            ? cookieValue.substring(separatorIndex + 1).trim()
+                            : '';
+                        if (!sessionId) {
                             throw new Error('Somfy returned an empty JSESSIONID cookie');
                         }
-                        return [2 /*return*/, match[1]];
+                        return [2 /*return*/, sessionId];
                     case 3:
                         error_1 = _c.sent();
                         if (axios_1.default.isAxiosError(error_1)) {
                             status_1 = (_a = error_1.response) === null || _a === void 0 ? void 0 : _a.status;
-                            statusText = (_b = error_1.response) === null || _b === void 0 ? void 0 : _b.statusText;
-                            throw new Error("Somfy login HTTP error: " +
-                                "".concat(status_1 || 'No HTTP response', " ") +
-                                "".concat(statusText || error_1.message));
+                            responseData = (_b = error_1.response) === null || _b === void 0 ? void 0 : _b.data;
+                            serverError = typeof responseData === 'string'
+                                ? responseData
+                                : JSON.stringify(responseData || {});
+                            throw new Error("Somfy login failed. " +
+                                "HTTP: ".concat(status_1 || 'No response', ". ") +
+                                "Code: ".concat(error_1.code || 'N/A', ". ") +
+                                "Server response: ".concat(serverError || 'No response body'));
                         }
                         throw error_1;
                     case 4: return [2 /*return*/];
@@ -117,85 +149,128 @@ var SomfyApi = /** @class */ (function () {
             });
         });
     };
+    /**
+     * Generate and activate a local access token.
+     */
     SomfyApi.getLocalToken = function (userId, userPwd, tahomaPin, somfyOverkizSrvUrl) {
         return __awaiter(this, void 0, void 0, function () {
-            var sessionId, response, token;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var sessionId, serverUrl, sanitizedPin, response, token;
+            var _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0: return [4 /*yield*/, SomfyApi.getSessionId(userId, userPwd, somfyOverkizSrvUrl)];
                     case 1:
-                        sessionId = _a.sent();
-                        if (sessionId === null) {
+                        sessionId = _b.sent();
+                        if (!sessionId) {
                             return [2 /*return*/, null];
                         }
+                        serverUrl = somfyOverkizSrvUrl.replace(/\/+$/, '');
+                        sanitizedPin = encodeURIComponent(tahomaPin);
                         return [4 /*yield*/, (0, axios_1.default)({
-                                url: "".concat(somfyOverkizSrvUrl, "/config/").concat(tahomaPin, "/local/tokens/generate"),
+                                url: "".concat(serverUrl, "/config/").concat(sanitizedPin, "/local/tokens/generate"),
                                 method: 'GET',
                                 headers: {
                                     Cookie: "JSESSIONID=".concat(sessionId),
+                                    Accept: 'application/json',
                                 },
+                                timeout: API_TIMEOUT,
                             })];
                     case 2:
-                        response = _a.sent();
-                        token = response.data.token;
+                        response = _b.sent();
+                        token = (_a = response.data) === null || _a === void 0 ? void 0 : _a.token;
                         if (!token) {
                             return [2 /*return*/, null];
                         }
                         return [4 /*yield*/, SomfyApi.activateLocalToken(token, tahomaPin, sessionId, somfyOverkizSrvUrl)];
                     case 3:
-                        _a.sent();
+                        _b.sent();
                         return [2 /*return*/, token];
                 }
             });
         });
     };
+    /**
+     * Activate a generated local access token.
+     */
     SomfyApi.activateLocalToken = function (token, pin, sessionId, somfyOverkizSrvUrl) {
         return __awaiter(this, void 0, void 0, function () {
-            var now;
+            var now, serverUrl, sanitizedPin, label;
             return __generator(this, function (_a) {
                 now = new Date();
+                serverUrl = somfyOverkizSrvUrl.replace(/\/+$/, '');
+                sanitizedPin = encodeURIComponent(pin);
+                label = 'Node RED Instance ' +
+                    now.getFullYear() +
+                    "".concat(now.getMonth() + 1 < 10 ? '0' : '').concat(now.getMonth() + 1) +
+                    "".concat(now.getDate() < 10 ? '0' : '').concat(now.getDate()) +
+                    '-' +
+                    now.getHours() +
+                    'h' +
+                    now.getMinutes() +
+                    'm' +
+                    now.getSeconds();
                 return [2 /*return*/, (0, axios_1.default)({
-                        url: "".concat(somfyOverkizSrvUrl, "/config/").concat(pin, "/local/tokens"),
+                        url: "".concat(serverUrl, "/config/").concat(sanitizedPin, "/local/tokens"),
                         method: 'POST',
                         data: {
                             token: token,
                             scope: 'devmode',
-                            label: 'Node RED Instance ' +
-                                now.getFullYear() +
-                                "".concat(now.getMonth() + 1 < 10 ? '0' : '').concat(now.getMonth() + 1) +
-                                "".concat(now.getDate() < 10 ? '0' : '').concat(now.getDate()) +
-                                '-' +
-                                now.getHours() +
-                                'h' +
-                                now.getMinutes() +
-                                'm' +
-                                now.getSeconds(),
+                            label: label,
                         },
                         headers: {
                             'Content-Type': 'application/json',
                             Cookie: "JSESSIONID=".concat(sessionId),
                         },
+                        timeout: API_TIMEOUT,
                     })];
             });
         });
     };
+    /**
+     * Execute an authenticated API request.
+     *
+     * Axios automatically rejects HTTP responses outside the 2xx range.
+     * The original error is preserved for better diagnostics.
+     */
     SomfyApi.prototype._request = function (options) {
-        return this.axiosInstance(options).then(function (response) {
-            if (response.status !== http_response_enum_1.HttpResponse.OK) {
-                return 'http_error';
-            }
-            return response.data;
+        return __awaiter(this, void 0, void 0, function () {
+            var response;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, this.axiosInstance(__assign({ timeout: API_TIMEOUT }, options))];
+                    case 1:
+                        response = _a.sent();
+                        return [2 /*return*/, response.data];
+                }
+            });
         });
     };
+    /**
+     * Retrieve the configured access token.
+     */
     SomfyApi.prototype.getAccessToken = function () {
-        return this.configNode['token'];
-    };
-    SomfyApi.prototype.getGatewayUrl = function () {
-        if (!this.configNode || !this.configNode['url']) {
-            return undefined;
+        var _a;
+        var token = (_a = this.configNode) === null || _a === void 0 ? void 0 : _a['token'];
+        if (typeof token !== 'string' || !token.trim()) {
+            throw new Error('Somfy API: missing access token in configuration node');
         }
-        return "".concat(this.configNode['url'], "/enduser-mobile-web/1/enduserAPI");
+        return token;
     };
+    /**
+     * Retrieve the configured gateway URL.
+     */
+    SomfyApi.prototype.getGatewayUrl = function () {
+        var _a;
+        var configuredUrl = (_a = this.configNode) === null || _a === void 0 ? void 0 : _a['url'];
+        if (typeof configuredUrl !== 'string' || !configuredUrl.trim()) {
+            throw new Error('Somfy API: missing gateway URL in configuration node');
+        }
+        var baseUrl = configuredUrl.replace(/\/+$/, '');
+        return "".concat(baseUrl, "/enduser-mobile-web/1/enduserAPI");
+    };
+    /**
+     * Retrieve a device.
+     */
     SomfyApi.prototype.getDevice = function (device) {
         var sanitizedDeviceUrl = encodeURIComponent(device);
         return this._request({
@@ -203,6 +278,9 @@ var SomfyApi = /** @class */ (function () {
             method: 'GET',
         });
     };
+    /**
+     * Retrieve device states.
+     */
     SomfyApi.prototype.getDeviceStates = function (device) {
         var sanitizedDeviceUrl = encodeURIComponent(device);
         return this._request({
@@ -210,12 +288,18 @@ var SomfyApi = /** @class */ (function () {
             method: 'GET',
         });
     };
+    /**
+     * Retrieve all configured devices.
+     */
     SomfyApi.prototype.getDevices = function () {
         return this._request({
             url: "".concat(this.getGatewayUrl(), "/setup/devices"),
             method: 'GET',
         });
     };
+    /**
+     * Execute a device command.
+     */
     SomfyApi.prototype.execute = function (device, command) {
         return this._request({
             url: "".concat(this.getGatewayUrl(), "/exec/apply"),
@@ -234,9 +318,14 @@ var SomfyApi = /** @class */ (function () {
             },
         });
     };
+    /**
+     * Retrieve the status of a command execution.
+     */
     SomfyApi.prototype.getStatusForExecutionId = function (execId) {
+        var sanitizedExecId = encodeURIComponent(execId);
         return this._request({
-            url: "".concat(this.getGatewayUrl(), "/exec/current/").concat(execId),
+            url: "".concat(this.getGatewayUrl(), "/exec/current/").concat(sanitizedExecId),
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
             },

@@ -1,5 +1,4 @@
 import * as nodered from 'node-red';
-import { SomfyCloudApi } from '../core/somfy-cloud-api';
 import { TahomaScenarioControlNodeDef } from './tahoma-scenario-control.def';
 
 interface IScenarioControlMessage extends nodered.NodeMessageInFlow {
@@ -20,9 +19,6 @@ export = (RED: nodered.NodeAPI): void => {
       this['cloudConfig'] = props.cloudConfig;
       this['scenarioId'] = props.scenarioId;
 
-      // Register the Node-RED input event.
-      // Some versions of the Node-RED typings do not expose
-      // the input event in the Node.on() overloads.
       const node = this as nodered.Node & {
         on: (
           event: string,
@@ -31,8 +27,6 @@ export = (RED: nodered.NodeAPI): void => {
       };
 
       node.on('input', async (msg: IScenarioControlMessage) => {
-        let api: SomfyCloudApi | undefined;
-
         try {
           const configNode = RED.nodes.getNode(this['cloudConfig']);
 
@@ -40,12 +34,14 @@ export = (RED: nodered.NodeAPI): void => {
             throw new Error('TaHoma Cloud configuration not found');
           }
 
-          const createApi = configNode['createApi'] as
-            | (() => SomfyCloudApi)
-            | null;
+          const executeScenario = configNode['executeScenario'] as
+            | ((scenarioId: string) => Promise<{ execId: string }>)
+            | undefined;
 
-          if (!createApi) {
-            throw new Error('TaHoma Cloud credentials are missing');
+          if (!executeScenario) {
+            throw new Error(
+              'TaHoma Cloud scenario execution manager is unavailable',
+            );
           }
 
           const payload = msg.payload as IScenarioControlPayload;
@@ -63,17 +59,13 @@ export = (RED: nodered.NodeAPI): void => {
             );
           }
 
-          api = createApi();
-
           this.status({
             fill: 'yellow',
             shape: 'dot',
-            text: 'Connecting to Somfy Cloud...',
+            text: 'Executing scenario...',
           });
 
-          await api.login();
-
-          const execution = await api.executeActionGroup(scenarioId);
+          const execution = await executeScenario(scenarioId);
 
           msg.payload = {
             scenarioId,
@@ -98,10 +90,6 @@ export = (RED: nodered.NodeAPI): void => {
           });
 
           this.error(`TaHoma scenario error: ${message}`, msg);
-        } finally {
-          if (api) {
-            api.logout();
-          }
         }
       });
     },

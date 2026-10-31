@@ -41,9 +41,12 @@ export class SomfyCloudApi {
    *
    * Uses SomfyApi.getSessionId() to authenticate and retrieve
    * the JSESSIONID cookie.
+   *
+   * Authentication is explicitly controlled by the configuration node.
+   * This method must not be called for every API request.
    */
   public async login(): Promise<void> {
-    // Clear any previous session.
+    // Clear any previous local session before authenticating.
     this.sessionId = null;
 
     try {
@@ -70,10 +73,21 @@ export class SomfyCloudApi {
   }
 
   /**
+   * Check whether a local session identifier is available.
+   *
+   * This is a local check only.
+   * It does not generate an HTTP request to Somfy.
+   */
+  public hasSession(): boolean {
+    return this.sessionId !== null;
+  }
+
+  /**
    * Check whether the current session is still valid.
    *
-   * This method checks both authentication and access to
-   * the actionGroups endpoint.
+   * This method performs a real request to the actionGroups endpoint.
+   * Avoid calling it during normal operation because it generates
+   * additional traffic to Somfy Cloud.
    */
   public async isAuthenticated(): Promise<boolean> {
     if (!this.sessionId) {
@@ -150,12 +164,24 @@ export class SomfyCloudApi {
   }
 
   /**
+   * Invalidate the current local session.
+   *
+   * Used by the configuration node when Somfy indicates that
+   * the session has expired or is no longer authorised.
+   *
+   * Does not perform an HTTP request.
+   */
+  public invalidateSession(): void {
+    this.sessionId = null;
+  }
+
+  /**
    * Clear the local cloud session.
    *
    * This does not revoke the session on the Somfy server.
    */
   public logout(): void {
-    this.sessionId = null;
+    this.invalidateSession();
   }
 
   /**

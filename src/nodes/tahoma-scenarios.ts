@@ -1,5 +1,4 @@
 import * as nodered from 'node-red';
-import { SomfyCloudApi } from '../core/somfy-cloud-api';
 import { TahomaScenariosNodeDef } from './tahoma-scenarios.def';
 
 interface ISomfyScenario {
@@ -19,8 +18,6 @@ export = (RED: nodered.NodeAPI): void => {
       this['cloudConfig'] = props.cloudConfig;
 
       this.on('input', async (msg: nodered.NodeMessageInFlow) => {
-        let api: SomfyCloudApi | undefined;
-
         try {
           const configNode = RED.nodes.getNode(this['cloudConfig']);
 
@@ -28,40 +25,28 @@ export = (RED: nodered.NodeAPI): void => {
             throw new Error('TaHoma Cloud configuration not found');
           }
 
-          const createApi = configNode['createApi'] as
-            | (() => SomfyCloudApi)
-            | null;
+          const getScenarios = configNode['getScenarios'] as
+            | (() => Promise<{ id: string; name: string }[]>)
+            | undefined;
 
-          if (!createApi) {
-            throw new Error(
-              'TaHoma Cloud credentials or regional server are missing',
-            );
+          if (!getScenarios) {
+            throw new Error('TaHoma Cloud scenario manager is unavailable');
           }
-
-          api = createApi();
 
           this.status({
             fill: 'yellow',
             shape: 'dot',
-            text: 'Connecting to Somfy Cloud...',
+            text: 'Retrieving scenarios...',
           });
 
-          await api.login();
+          const actionGroups = await getScenarios();
 
-          const actionGroups = await api.getActionGroups();
-
-          const scenarios: ISomfyScenario[] = actionGroups.map((group) => {
-            if (!group.oid || !group.label) {
-              throw new Error('Invalid scenario returned by Somfy Cloud');
-            }
-
-            return {
-              id: group.oid,
-              name: group.label,
-              oid: group.oid,
-              label: group.label,
-            };
-          });
+          const scenarios: ISomfyScenario[] = actionGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            oid: group.id,
+            label: group.name,
+          }));
 
           msg.payload = scenarios;
 
@@ -83,10 +68,6 @@ export = (RED: nodered.NodeAPI): void => {
           });
 
           this.error(`TaHoma scenarios error: ${message}`, msg);
-        } finally {
-          if (api) {
-            api.logout();
-          }
         }
       });
     },

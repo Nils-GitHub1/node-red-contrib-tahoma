@@ -5,4 +5,5 @@ export interface TahomaConfigNodeDef extends nodered.NodeDef {
   pin: string;
   token: string;
   url: string;
+  acceptUntrustedCertificates: boolean;
 }

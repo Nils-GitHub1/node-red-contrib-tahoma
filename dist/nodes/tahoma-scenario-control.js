@@ -42,23 +42,20 @@ module.exports = function (RED) {
         this['name'] = props.name;
         this['cloudConfig'] = props.cloudConfig;
         this['scenarioId'] = props.scenarioId;
-        // Register the Node-RED input event.
-        // Some versions of the Node-RED typings do not expose
-        // the input event in the Node.on() overloads.
         var node = this;
         node.on('input', function (msg) { return __awaiter(_this, void 0, void 0, function () {
-            var api, configNode, createApi, payload, scenarioId, execution, error_1, message;
+            var configNode, executeScenario, payload, scenarioId, execution, error_1, message;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 3, 4, 5]);
+                        _a.trys.push([0, 2, , 3]);
                         configNode = RED.nodes.getNode(this['cloudConfig']);
                         if (!configNode) {
                             throw new Error('TaHoma Cloud configuration not found');
                         }
-                        createApi = configNode['createApi'];
-                        if (!createApi) {
-                            throw new Error('TaHoma Cloud credentials are missing');
+                        executeScenario = configNode['executeScenario'];
+                        if (!executeScenario) {
+                            throw new Error('TaHoma Cloud scenario execution manager is unavailable');
                         }
                         payload = msg.payload;
                         scenarioId = typeof msg.payload === 'string'
@@ -69,17 +66,13 @@ module.exports = function (RED) {
                         if (!scenarioId || typeof scenarioId !== 'string') {
                             throw new Error('No scenario selected. Configure a scenario or provide msg.payload.scenarioId');
                         }
-                        api = createApi();
                         this.status({
                             fill: 'yellow',
                             shape: 'dot',
-                            text: 'Connecting to Somfy Cloud...',
+                            text: 'Executing scenario...',
                         });
-                        return [4 /*yield*/, api.login()];
+                        return [4 /*yield*/, executeScenario(scenarioId)];
                     case 1:
-                        _a.sent();
-                        return [4 /*yield*/, api.executeActionGroup(scenarioId)];
-                    case 2:
                         execution = _a.sent();
                         msg.payload = {
                             scenarioId: scenarioId,
@@ -91,8 +84,8 @@ module.exports = function (RED) {
                             text: 'Scenario execution requested',
                         });
                         this.send(msg);
-                        return [3 /*break*/, 5];
-                    case 3:
+                        return [3 /*break*/, 3];
+                    case 2:
                         error_1 = _a.sent();
                         message = error_1 instanceof Error ? error_1.message : String(error_1);
                         this.status({
@@ -101,13 +94,8 @@ module.exports = function (RED) {
                             text: 'Scenario execution failed',
                         });
                         this.error("TaHoma scenario error: ".concat(message), msg);
-                        return [3 /*break*/, 5];
-                    case 4:
-                        if (api) {
-                            api.logout();
-                        }
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
+                        return [3 /*break*/, 3];
+                    case 3: return [2 /*return*/];
                 }
             });
         }); });

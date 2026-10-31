@@ -71,6 +71,9 @@ var SomfyCloudApi = /** @class */ (function () {
      *
      * Uses SomfyApi.getSessionId() to authenticate and retrieve
      * the JSESSIONID cookie.
+     *
+     * Authentication is explicitly controlled by the configuration node.
+     * This method must not be called for every API request.
      */
     SomfyCloudApi.prototype.login = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -78,7 +81,7 @@ var SomfyCloudApi = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        // Clear any previous session.
+                        // Clear any previous local session before authenticating.
                         this.sessionId = null;
                         _a.label = 1;
                     case 1:
@@ -103,10 +106,20 @@ var SomfyCloudApi = /** @class */ (function () {
         });
     };
     /**
+     * Check whether a local session identifier is available.
+     *
+     * This is a local check only.
+     * It does not generate an HTTP request to Somfy.
+     */
+    SomfyCloudApi.prototype.hasSession = function () {
+        return this.sessionId !== null;
+    };
+    /**
      * Check whether the current session is still valid.
      *
-     * This method checks both authentication and access to
-     * the actionGroups endpoint.
+     * This method performs a real request to the actionGroups endpoint.
+     * Avoid calling it during normal operation because it generates
+     * additional traffic to Somfy Cloud.
      */
     SomfyCloudApi.prototype.isAuthenticated = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -195,12 +208,23 @@ var SomfyCloudApi = /** @class */ (function () {
         });
     };
     /**
+     * Invalidate the current local session.
+     *
+     * Used by the configuration node when Somfy indicates that
+     * the session has expired or is no longer authorised.
+     *
+     * Does not perform an HTTP request.
+     */
+    SomfyCloudApi.prototype.invalidateSession = function () {
+        this.sessionId = null;
+    };
+    /**
      * Clear the local cloud session.
      *
      * This does not revoke the session on the Somfy server.
      */
     SomfyCloudApi.prototype.logout = function () {
-        this.sessionId = null;
+        this.invalidateSession();
     };
     /**
      * Perform an authenticated cloud request.

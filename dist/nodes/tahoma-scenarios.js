@@ -42,42 +42,33 @@ module.exports = function (RED) {
         this['name'] = props.name;
         this['cloudConfig'] = props.cloudConfig;
         this.on('input', function (msg) { return __awaiter(_this, void 0, void 0, function () {
-            var api, configNode, createApi, actionGroups, scenarios, error_1, message;
+            var configNode, getScenarios, actionGroups, scenarios, error_1, message;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 3, 4, 5]);
+                        _a.trys.push([0, 2, , 3]);
                         configNode = RED.nodes.getNode(this['cloudConfig']);
                         if (!configNode) {
                             throw new Error('TaHoma Cloud configuration not found');
                         }
-                        createApi = configNode['createApi'];
-                        if (!createApi) {
-                            throw new Error('TaHoma Cloud credentials or regional server are missing');
+                        getScenarios = configNode['getScenarios'];
+                        if (!getScenarios) {
+                            throw new Error('TaHoma Cloud scenario manager is unavailable');
                         }
-                        api = createApi();
                         this.status({
                             fill: 'yellow',
                             shape: 'dot',
-                            text: 'Connecting to Somfy Cloud...',
+                            text: 'Retrieving scenarios...',
                         });
-                        return [4 /*yield*/, api.login()];
+                        return [4 /*yield*/, getScenarios()];
                     case 1:
-                        _a.sent();
-                        return [4 /*yield*/, api.getActionGroups()];
-                    case 2:
                         actionGroups = _a.sent();
-                        scenarios = actionGroups.map(function (group) {
-                            if (!group.oid || !group.label) {
-                                throw new Error('Invalid scenario returned by Somfy Cloud');
-                            }
-                            return {
-                                id: group.oid,
-                                name: group.label,
-                                oid: group.oid,
-                                label: group.label,
-                            };
-                        });
+                        scenarios = actionGroups.map(function (group) { return ({
+                            id: group.id,
+                            name: group.name,
+                            oid: group.id,
+                            label: group.name,
+                        }); });
                         msg.payload = scenarios;
                         this.status({
                             fill: 'green',
@@ -85,8 +76,8 @@ module.exports = function (RED) {
                             text: "".concat(scenarios.length, " scenario(s) found"),
                         });
                         this.send(msg);
-                        return [3 /*break*/, 5];
-                    case 3:
+                        return [3 /*break*/, 3];
+                    case 2:
                         error_1 = _a.sent();
                         message = error_1 instanceof Error ? error_1.message : String(error_1);
                         this.status({
@@ -95,13 +86,8 @@ module.exports = function (RED) {
                             text: 'Cloud error',
                         });
                         this.error("TaHoma scenarios error: ".concat(message), msg);
-                        return [3 /*break*/, 5];
-                    case 4:
-                        if (api) {
-                            api.logout();
-                        }
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
+                        return [3 /*break*/, 3];
+                    case 3: return [2 /*return*/];
                 }
             });
         }); });

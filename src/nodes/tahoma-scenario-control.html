@@ -188,10 +188,9 @@
         configuredScenarioId = $(this).val() || '';
       });
 
-      // Changing the cloud configuration resets the scenario.
+      // Changing the cloud configuration does not automatically refresh scenarios.
       cloudConfigInput.on('change', function () {
-        configuredScenarioId = '';
-        loadScenarios(false);
+        // Keep the existing scenario selection.
       });
 
       // Refresh scenarios while preserving the selection.
@@ -200,8 +199,14 @@
         loadScenarios(true);
       });
 
-      // Load scenarios and restore the saved selection.
-      loadScenarios(true);
+      // Automatically load scenarios ONLY for a new node.
+      // Existing nodes restore their saved scenario without a cloud request.
+      if (!configuredScenarioId) {
+        loadScenarios(false);
+      } else {
+        addOption(configuredScenarioId, 'Previously selected scenario');
+        scenarioSelect.val(configuredScenarioId);
+      }
     },
 
     // Explicitly persist the selected scenario when saving the node.

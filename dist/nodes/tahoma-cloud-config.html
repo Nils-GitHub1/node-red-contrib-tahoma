@@ -199,6 +199,10 @@
   <div class="form-tips">
     This configuration connects to your existing Somfy TaHoma Cloud account.
     It does not replace or modify the local TaHoma connection.
+    If you get an AUTHENTICATION_ERROR "Too many requests, try again later"
+    This may be due to reported Somfy API login limits, which seems to be:
+    6 auth tokens per hour, a daily limit of 30 connections or
+    repeated authentication with invalid/expired tokens.
   </div>
 </script>
 

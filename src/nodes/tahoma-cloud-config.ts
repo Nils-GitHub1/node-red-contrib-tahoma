@@ -451,6 +451,20 @@ export = (RED: nodered.NodeAPI): void => {
     const userId = submittedUserId || storedCredentials?.userId;
     const userPassword = submittedPassword || storedCredentials?.userPassword;
 
+    // TEMPORARY DIAGNOSTICS
+    console.log('[Somfy Config] Password diagnostics:', {
+      length: userPassword?.length,
+      containsEuro: userPassword?.includes('€'),
+      containsNonAscii: userPassword
+        ? /[^\x00-\x7F]/.test(String(userPassword))
+        : false,
+      containsEuroCodePoint: userPassword
+        ? Array.from(String(userPassword)).some(
+            (c: string) => c.codePointAt(0) === 8364,
+          )
+        : false,
+    });
+
     if (!userId || !userPassword || !serverUrl) {
       response.status(HttpResponse.BAD_REQUEST);
 

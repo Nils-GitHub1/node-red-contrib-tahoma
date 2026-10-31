@@ -452,6 +452,17 @@ module.exports = function (RED) {
                     storedCredentials = configNode === null || configNode === void 0 ? void 0 : configNode.credentials;
                     userId = submittedUserId || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userId);
                     userPassword = submittedPassword || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userPassword);
+                    // TEMPORARY DIAGNOSTICS
+                    console.log('[Somfy Config] Password diagnostics:', {
+                        length: userPassword === null || userPassword === void 0 ? void 0 : userPassword.length,
+                        containsEuro: userPassword === null || userPassword === void 0 ? void 0 : userPassword.includes('€'),
+                        containsNonAscii: userPassword
+                            ? /[^\x00-\x7F]/.test(String(userPassword))
+                            : false,
+                        containsEuroCodePoint: userPassword
+                            ? Array.from(String(userPassword)).some(function (c) { return c.codePointAt(0) === 8364; })
+                            : false,
+                    });
                     if (!userId || !userPassword || !serverUrl) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
                         response.json({

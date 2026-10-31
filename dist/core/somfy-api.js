@@ -49,6 +49,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SomfyApi = void 0;
 var axios_1 = require("axios");
+var https = require("https");
 /**
  * Default timeout for Somfy API requests.
  */
@@ -56,12 +57,29 @@ var API_TIMEOUT = 20000;
 var SomfyApi = /** @class */ (function () {
     /**
      * Initialize the Somfy API client.
+     *
+     * @param configNode Node-RED configuration node.
+     * @param acceptUntrustedCertificates Whether to disable HTTPS
+     * certificate verification for the local TaHoma connection.
+     *
+     * Certificate verification is enabled by default.
      */
-    function SomfyApi(configNode) {
+    function SomfyApi(configNode, acceptUntrustedCertificates) {
+        if (acceptUntrustedCertificates === void 0) { acceptUntrustedCertificates = (configNode === null || configNode === void 0 ? void 0 : configNode['acceptUntrustedCertificates']) === true; }
         var _this = this;
         this.configNode = configNode;
-        // Use Axios defaults, including normal HTTPS certificate validation.
-        this.axiosInstance = axios_1.default.create();
+        if (acceptUntrustedCertificates === true) {
+            // Allow untrusted certificates ONLY for this local API instance.
+            this.axiosInstance = axios_1.default.create({
+                httpsAgent: new https.Agent({
+                    rejectUnauthorized: false,
+                }),
+            });
+        }
+        else {
+            // Normal HTTPS certificate verification.
+            this.axiosInstance = axios_1.default.create();
+        }
         this.axiosInstance.interceptors.request.use(function (config) {
             var accessToken = _this.getAccessToken();
             config.headers = config.headers || {};
@@ -151,6 +169,8 @@ var SomfyApi = /** @class */ (function () {
     };
     /**
      * Generate and activate a local access token.
+     *
+     * HTTPS certificate verification remains enabled.
      */
     SomfyApi.getLocalToken = function (userId, userPwd, tahomaPin, somfyOverkizSrvUrl) {
         return __awaiter(this, void 0, void 0, function () {
@@ -191,6 +211,8 @@ var SomfyApi = /** @class */ (function () {
     };
     /**
      * Activate a generated local access token.
+     *
+     * HTTPS certificate verification remains enabled.
      */
     SomfyApi.activateLocalToken = function (token, pin, sessionId, somfyOverkizSrvUrl) {
         return __awaiter(this, void 0, void 0, function () {

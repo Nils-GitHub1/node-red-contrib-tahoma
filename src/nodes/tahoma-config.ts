@@ -16,29 +16,46 @@ export = (RED: nodered.NodeAPI): void => {
       this['name'] = props.name;
       this['token'] = props.token;
       this['url'] = props.url;
+
+      // Default to secure HTTPS certificate verification.
+      this['acceptUntrustedCertificates'] =
+        props.acceptUntrustedCertificates === true;
     },
   );
 
   RED.httpAdmin.post('/somfy/get-token', async (request, response) => {
     const { userId, userPassword, tahomaPin, somfyOverkizSrvUrl } =
       request.body;
+
+    // Cloud authentication and token generation retain normal
+    // HTTPS certificate verification.
     const token = await SomfyApi.getLocalToken(
       userId,
       userPassword,
       tahomaPin,
       somfyOverkizSrvUrl,
     );
+
     if (token === null) {
       response.status(HttpResponse.BAD_REQUEST);
       response.send();
       return;
     }
+
     response.json({ token: token });
   });
 
   RED.httpAdmin.get('/somfy/:account/devices', function (req, res) {
-    const configNode = RED.nodes.getNode(req.params.account); // Get config node
-    const somfyApiClient = new SomfyApi(configNode);
+    const configNode = RED.nodes.getNode(req.params.account);
+
+    const acceptUntrustedCertificates =
+      configNode?.['acceptUntrustedCertificates'] === true;
+
+    const somfyApiClient = new SomfyApi(
+      configNode,
+      acceptUntrustedCertificates,
+    );
+
     somfyApiClient
       .getDevices()
       .then((devices: IDevice[]) => {

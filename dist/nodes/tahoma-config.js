@@ -44,6 +44,9 @@ module.exports = function (RED) {
         this['name'] = props.name;
         this['token'] = props.token;
         this['url'] = props.url;
+        // Default to secure HTTPS certificate verification.
+        this['acceptUntrustedCertificates'] =
+            props.acceptUntrustedCertificates === true;
     });
     RED.httpAdmin.post('/somfy/get-token', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
         var _a, userId, userPassword, tahomaPin, somfyOverkizSrvUrl, token;
@@ -65,8 +68,9 @@ module.exports = function (RED) {
         });
     }); });
     RED.httpAdmin.get('/somfy/:account/devices', function (req, res) {
-        var configNode = RED.nodes.getNode(req.params.account); // Get config node
-        var somfyApiClient = new somfy_api_1.SomfyApi(configNode);
+        var configNode = RED.nodes.getNode(req.params.account);
+        var acceptUntrustedCertificates = (configNode === null || configNode === void 0 ? void 0 : configNode['acceptUntrustedCertificates']) === true;
+        var somfyApiClient = new somfy_api_1.SomfyApi(configNode, acceptUntrustedCertificates);
         somfyApiClient
             .getDevices()
             .then(function (devices) {

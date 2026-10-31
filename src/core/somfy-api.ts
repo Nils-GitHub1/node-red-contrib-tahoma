@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosInstance } from 'axios';
+import * as https from 'https';
 
 import { ICommand } from '../interfaces/command';
 import { IDevice } from '../interfaces/device';
@@ -111,6 +112,8 @@ export class SomfyApi {
 
   /**
    * Generate and activate a local access token.
+   *
+   * HTTPS certificate verification remains enabled.
    */
   static async getLocalToken(
     userId: string,
@@ -159,6 +162,8 @@ export class SomfyApi {
 
   /**
    * Activate a generated local access token.
+   *
+   * HTTPS certificate verification remains enabled.
    */
   static async activateLocalToken(
     token: string,
@@ -201,12 +206,32 @@ export class SomfyApi {
 
   /**
    * Initialize the Somfy API client.
+   *
+   * @param configNode Node-RED configuration node.
+   * @param acceptUntrustedCertificates Whether to disable HTTPS
+   * certificate verification for the local TaHoma connection.
+   *
+   * Certificate verification is enabled by default.
    */
-  constructor(configNode: Node) {
+  constructor(
+    configNode: Node,
+    acceptUntrustedCertificates: boolean = configNode?.[
+      'acceptUntrustedCertificates'
+    ] === true,
+  ) {
     this.configNode = configNode;
 
-    // Use Axios defaults, including normal HTTPS certificate validation.
-    this.axiosInstance = axios.create();
+    if (acceptUntrustedCertificates === true) {
+      // Allow untrusted certificates ONLY for this local API instance.
+      this.axiosInstance = axios.create({
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false,
+        }),
+      });
+    } else {
+      // Normal HTTPS certificate verification.
+      this.axiosInstance = axios.create();
+    }
 
     this.axiosInstance.interceptors.request.use(
       (config) => {

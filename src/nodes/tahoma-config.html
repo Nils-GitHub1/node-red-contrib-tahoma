@@ -6,6 +6,7 @@
       pin: { required: true },
       token: { required: true },
       url: { required: true },
+      acceptUntrustedCertificates: { value: false },
     },
     label: function () {
       return this.connectionname;
@@ -19,11 +20,16 @@
         $('.shown-on-ok').hide();
       }
 
-      const LOGIN_URL =  $('#node-config-input-regional-srv').val() + '/login';
+      const LOGIN_URL = $('#node-config-input-regional-srv').val() + '/login';
 
       $('button.api-link').on('click', () => {
         const pinCode = $('#node-config-input-pin').val();
-        RED.notify(`Connecting to Somfy Overkiz server to generate and activate the local token ... ${LOGIN_URL}`, { type: "success", timeout: 5000 });
+
+        RED.notify(
+          `Connecting to Somfy Overkiz server to generate and activate the local token ... ${LOGIN_URL}`,
+          { type: 'success', timeout: 5000 },
+        );
+
         $.ajax({
           url: `${window.location.protocol}//${window.location.host}${window.location.pathname}somfy/get-token`,
           method: 'POST',
@@ -35,6 +41,7 @@
           },
           success: (response) => {
             $('#node-config-input-token').val(response.token);
+
             if (response.devices) {
               $('#node-config-input-url').val(
                 `https://${response.devices.host}:${response.devices.port}`,
@@ -55,40 +62,49 @@
         $('.hidden-on-ok').show();
         $('.shown-on-ok').hide();
       });
-	  
+
       $('#node-config-input-autodiscovery').on('change', () => {
-          if ($(this).is(':checked')){
-              $('#node-config-input-url').show();
-          }
+        if ($(this).is(':checked')) {
+          $('#node-config-input-url').show();
+        }
       });
     },
   });
 </script>
+
 <script type="text/x-red" data-template-name="tahoma-config">
   <p>In order to properly configure your TaHoma nodes, you need first to be enable the <b>Developer Mode</b> using the TaHoma mobile app </p><a href="https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode/blob/main/README.md" target="_blank">How to do it</a><p><b>But do not generate a token like mentioned in this How To</b>. Then please fill-in the following fields : <b><i>Connection name</i>, <i>TaHoma box local URL</i>, <i>TaHoma box PIN</i></b>.</p>
+
   <p>Then, after activation of the developer mode, a token needs to be generated <b>AND</b> activated here in Node Red. To do this, enter your TaHoma app login information (email and password, used once and not saved) below to create and activate a token that will then be used to locally connect to your TaHoma box. Click on the <b>Generate new token</b> button.</p>
+
   <p><b>Note:</b> If you do not kown the IP address of your TaHoma box and are on the same LAN, you may find it with mDNS network discovery. If you do not see the box on the network, please ensure that the developer mode is enabled. Then enter the found URL and port of your TaHoma box.</p>
+
   <div class="form-row">
       <label for="node-config-input-connectionname"><i class="icon-bookmark"></i> Connection Name:</label>
       <input type="text" id="node-config-input-connectionname">
   </div>
+
   <div class="form-row api-credentials">
     <label for="node-config-input-url"><i class="icon-bookmark"></i> TaHoma box URL:</label>
     <input type="text" id="node-config-input-url" placeholder="example: https://gateway-1234-5678-9123:8443">
     <p><i>Example: Using TaHoma local IP https://192.168.20.54:8443 or using mDNS name of the box if on same LAN https://gateway-1234-5678-9123:8443</i></p>
   </div>
+
   <div class="form-row api-credentials">
-    <label for="node-config-input-apikey"><i class="icon-bookmark"></i> Box PIN:</label>
+    <label for="node-config-input-pin"><i class="icon-bookmark"></i> Box PIN:</label>
     <input type="text" id="node-config-input-pin" placeholder="example: 1234-5678-9123">
   </div>
+
   <div class="form-row api-credentials hidden-on-ok">
-      <label for="node-config-input-apikey"><i class="icon-bookmark"></i> Email:</label>
+      <label for="node-config-input-email"><i class="icon-bookmark"></i> Email:</label>
       <input type="text" id="node-config-input-email">
   </div>
+
   <div class="form-row api-credentials hidden-on-ok">
-      <label for="node-config-input-apisecret"><i class="icon-bookmark"></i> Password:</label>
+      <label for="node-config-input-password"><i class="icon-bookmark"></i> Password:</label>
       <input type="password" id="node-config-input-password">
   </div>
+
   <div class="form-row api-credentials">
     <label for="node-config-input-regional-srv"><i class="icon-bookmark"></i> TaHoma app login region:</label>
     <select id="node-config-input-regional-srv" name="regional-srv">
@@ -97,17 +113,34 @@
       <option value="https://ha201-1.overkiz.com/enduser-mobile-web/enduserAPI">Oceania</option>
     </select>
   </div>
+
   <div class="form-row api-credentials shown-on-ok">
     <label for="node-config-input-token"><i class="icon-bookmark"></i> Token:</label>
     <input type="text" id="node-config-input-token">
   </div>
+
+  <div class="form-row">
+    <label for="node-config-input-acceptUntrustedCertificates">
+      <i class="icon-bookmark"></i> Accept untrusted HTTPS certificates:
+    </label>
+    <input type="checkbox" id="node-config-input-acceptUntrustedCertificates">
+    <p>
+      <i>
+        Note: Tahoma boxes use an Overkiz certificate not trusted by default on some OS. When enabled, this option disables certificate verification for connections
+        to the local TaHoma box only (so use it only on a trusted local network). The connections to the Somfy cloud are not impacted.
+      </i>
+    </p>
+  </div>
+
   <div class="form-row api-credentials shown-on-ok">
     <label for="node-config-input-autodiscovery"><i class="icon-bookmark"></i> Managed Devices Autodiscovery:</label>
     <input type="checkbox" id="node-config-input-autodiscovery" checked="checked">
     <p><i>Note: Autodiscovered devices managed by TaHoma will be displayed in the node after the nodes/flows are deployed in Node Red</i></p>
   </div>
 
-  <div class="form-error" style="border:  1px solid #AD1625;padding:  10px;color:  #AD1625;margin-bottom: 10px; display: none;">An error occurred. Please ensure your credentials (or token) and PIN code are correct.</div>
+  <div class="form-error" style="border: 1px solid #AD1625;padding: 10px;color: #AD1625;margin-bottom: 10px; display: none;">
+    An error occurred. Please ensure your credentials (or token) and PIN code are correct.
+  </div>
 
   <button class="api-credentials api-link hidden-on-ok">Create Connection/Local Token</button>
   <button class="api-credentials-reset shown-on-ok">Generate new Connnection/Local Token</button>

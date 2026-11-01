@@ -1,6 +1,9 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import { SomfyApi } from './somfy-api';
+import { SomfyCloudNewAuth } from './somfy-cloud-new-auth';
+
+export type SomfyCloudAuthMethod = 'legacy' | 'oauth';
 
 export interface ISomfyActionGroup {
   oid: string;
@@ -12,21 +15,65 @@ export interface ISomfyExecutionResponse {
 }
 
 export class SomfyCloudApi {
+  private readonly authMethod: SomfyCloudAuthMethod;
+
   private readonly serverUrl: string;
-  private readonly userId: string;
-  private readonly userPassword: string;
+
+  private readonly userId?: string;
+  private readonly userPassword?: string;
+
+  private readonly oauthAuth?: SomfyCloudNewAuth;
+
   private readonly axiosInstance: AxiosInstance;
 
   private sessionId: string | null = null;
 
-  constructor(userId: string, userPassword: string, serverUrl: string) {
-    if (!userId || !userPassword || !serverUrl) {
-      throw new Error('Somfy Cloud: missing credentials or server URL');
-    }
+  /**
+   * Legacy constructor.
+   *
+   * Kept for backward compatibility with existing Node-RED
+   * configurations and integrations.
+   */
+  constructor(userId: string, userPassword: string, serverUrl: string);
 
-    this.userId = userId;
-    this.userPassword = userPassword;
-    this.serverUrl = serverUrl.replace(/\/+$/, '');
+  /**
+   * New OAuth constructor.
+   */
+  constructor(oauthAuth: SomfyCloudNewAuth);
+
+  constructor(
+    userIdOrAuth: string | SomfyCloudNewAuth,
+    userPassword?: string,
+    serverUrl?: string,
+  ) {
+    if (typeof userIdOrAuth === 'string') {
+      if (!userIdOrAuth || !userPassword || !serverUrl) {
+        throw new Error(
+          'Somfy Cloud: missing legacy credentials or server URL',
+        );
+      }
+
+      this.authMethod = 'legacy';
+
+      this.userId = userIdOrAuth;
+      this.userPassword = userPassword;
+
+      this.serverUrl = serverUrl.replace(/\/+$/, '');
+    } else {
+      if (!userIdOrAuth) {
+        throw new Error(
+          'Somfy Cloud: OAuth authentication instance is required',
+        );
+      }
+
+      this.authMethod = 'oauth';
+
+      this.oauthAuth = userIdOrAuth;
+
+      // The OAuth endpoint is determined by the selected
+      // Somfy installation, not by the legacy region setting.
+      this.serverUrl = '';
+    }
 
     this.axiosInstance = axios.create({
       timeout: 20000,
@@ -37,16 +84,31 @@ export class SomfyCloudApi {
   }
 
   /**
-   * Authenticate against the Somfy Overkiz cloud.
+   * Authenticate against Somfy Cloud.
    *
-   * Uses SomfyApi.getSessionId() to authenticate and retrieve
-   * the JSESSIONID cookie.
-   *
-   * Authentication is explicitly controlled by the configuration node.
-   * This method must not be called for every API request.
+   * The authentication strategy is selected by the constructor.
    */
   public async login(): Promise<void> {
-    // Clear any previous local session before authenticating.
+    if (this.authMethod === 'legacy') {
+      await this.loginLegacy();
+      return;
+    }
+
+    if (!this.oauthAuth) {
+      throw new Error('Somfy Cloud: OAuth authentication is unavailable');
+    }
+
+    await this.oauthAuth.login();
+  }
+
+  /**
+   * Legacy JSESSIONID authentication.
+   */
+  private async loginLegacy(): Promise<void> {
+    if (!this.userId || !this.userPassword) {
+      throw new Error('Somfy Cloud: legacy credentials are missing');
+    }
+
     this.sessionId = null;
 
     try {
@@ -67,30 +129,31 @@ export class SomfyCloudApi {
     } catch (error) {
       this.sessionId = null;
 
-      // Preserve the original error, including Axios HTTP details.
+      // Preserve the original Axios or authentication error.
       throw error;
     }
   }
 
   /**
-   * Check whether a local session identifier is available.
+   * Check whether a local authentication context is available.
    *
-   * This is a local check only.
-   * It does not generate an HTTP request to Somfy.
+   * This is a local check only and does not make an HTTP request.
    */
   public hasSession(): boolean {
-    return this.sessionId !== null;
+    if (this.authMethod === 'legacy') {
+      return this.sessionId !== null;
+    }
+
+    return this.oauthAuth?.isAuthenticated() === true;
   }
 
   /**
-   * Check whether the current session is still valid.
+   * Check whether the current session is valid.
    *
-   * This method performs a real request to the actionGroups endpoint.
-   * Avoid calling it during normal operation because it generates
-   * additional traffic to Somfy Cloud.
+   * This performs an actual request to actionGroups.
    */
   public async isAuthenticated(): Promise<boolean> {
-    if (!this.sessionId) {
+    if (!this.hasSession()) {
       return false;
     }
 
@@ -107,7 +170,7 @@ export class SomfyCloudApi {
    */
   public async getActionGroups(): Promise<ISomfyActionGroup[]> {
     const response = await this.request({
-      url: `${this.serverUrl}/actionGroups`,
+      url: `${this.getEndpoint()}actionGroups`,
       method: 'GET',
     });
 
@@ -120,7 +183,6 @@ export class SomfyCloudApi {
       );
     }
 
-    // Validate the essential properties of each scenario.
     for (const group of actionGroups) {
       if (
         !group ||
@@ -139,6 +201,8 @@ export class SomfyCloudApi {
 
   /**
    * Execute an existing TaHoma scenario.
+   *
+   * Execution is deliberately not retried automatically.
    */
   public async executeActionGroup(
     actionGroupId: string,
@@ -148,7 +212,7 @@ export class SomfyCloudApi {
     }
 
     const response = await this.request({
-      url: `${this.serverUrl}/exec/${encodeURIComponent(actionGroupId)}`,
+      url: `${this.getEndpoint()}exec/` + encodeURIComponent(actionGroupId),
       method: 'POST',
     });
 
@@ -164,45 +228,119 @@ export class SomfyCloudApi {
   }
 
   /**
-   * Invalidate the current local session.
+   * Resolve the active cloud API endpoint.
    *
-   * Used by the configuration node when Somfy indicates that
-   * the session has expired or is no longer authorised.
+   * Legacy:
+   * Uses the regional URL supplied to the constructor.
    *
-   * Does not perform an HTTP request.
+   * OAuth:
+   * Uses the endpoint selected by SomfyCloudNewAuth.
    */
-  public invalidateSession(): void {
-    this.sessionId = null;
-  }
-
-  /**
-   * Clear the local cloud session.
-   *
-   * This does not revoke the session on the Somfy server.
-   */
-  public logout(): void {
-    this.invalidateSession();
-  }
-
-  /**
-   * Perform an authenticated cloud request.
-   *
-   * Axios errors are deliberately preserved so that callers
-   * can inspect HTTP status, response data and error codes.
-   */
-  private request(options: AxiosRequestConfig): Promise<AxiosResponse> {
-    if (!this.sessionId) {
-      return Promise.reject(new Error('Not authenticated with Somfy Cloud'));
+  private getEndpoint(): string {
+    if (this.authMethod === 'legacy') {
+      return `${this.serverUrl.replace(/\/+$/, '')}/`;
     }
+
+    if (!this.oauthAuth) {
+      throw new Error('Somfy Cloud: OAuth authentication is unavailable');
+    }
+
+    return this.oauthAuth.endpoint;
+  }
+
+  /**
+   * Generate the authentication headers.
+   *
+   * Legacy:
+   * Cookie: JSESSIONID=...
+   *
+   * OAuth:
+   * Authorization: Bearer ...
+   */
+  private async getAuthenticationHeaders(): Promise<{ [key: string]: string }> {
+    if (this.authMethod === 'legacy') {
+      if (!this.sessionId) {
+        throw new Error('Not authenticated with Somfy Cloud');
+      }
+
+      return {
+        Cookie: `JSESSIONID=${this.sessionId}`,
+      };
+    }
+
+    if (!this.oauthAuth) {
+      throw new Error('Somfy Cloud: OAuth authentication is unavailable');
+    }
+
+    return this.oauthAuth.getAuthHeaders();
+  }
+
+  /**
+   * Execute an authenticated cloud API request.
+   *
+   * The OAuth authentication strategy automatically handles
+   * access-token expiration and refresh before returning headers.
+   *
+   * Axios errors are deliberately preserved so that the
+   * configuration node can inspect HTTP status and error codes.
+   */
+  private async request(options: AxiosRequestConfig): Promise<AxiosResponse> {
+    const authHeaders = await this.getAuthenticationHeaders();
 
     const config: AxiosRequestConfig = {
       ...options,
       headers: {
         ...options.headers,
-        Cookie: `JSESSIONID=${this.sessionId}`,
+        ...authHeaders,
       },
     };
 
     return this.axiosInstance.request(config);
+  }
+
+  /**
+   * Invalidate the current local session.
+   *
+   * Legacy:
+   * Clears the JSESSIONID.
+   *
+   * OAuth:
+   * Does not delete the refresh token. A subsequent request
+   * can continue using the OAuth refresh mechanism.
+   */
+  public invalidateSession(): void {
+    if (this.authMethod === 'legacy') {
+      this.sessionId = null;
+    }
+  }
+
+  /**
+   * Clear the local authentication context.
+   *
+   * This does not revoke tokens or sessions on Somfy servers.
+   */
+  public logout(): void {
+    if (this.authMethod === 'legacy') {
+      this.invalidateSession();
+      return;
+    }
+
+    this.oauthAuth?.logout();
+  }
+
+  /**
+   * Return the selected authentication method.
+   */
+  public getAuthMethod(): SomfyCloudAuthMethod {
+    return this.authMethod;
+  }
+
+  /**
+   * Return the OAuth authentication instance.
+   *
+   * Returns undefined when using legacy authentication.
+   */
+  public getOAuthAuth(): SomfyCloudNewAuth | undefined {
+    return this.oauthAuth;
   }
 }

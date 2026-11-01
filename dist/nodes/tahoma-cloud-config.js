@@ -100,6 +100,12 @@ module.exports = function (RED) {
         this['name'] = props.name;
         this['region'] = props.region;
         var credentials = this.credentials;
+        var userId = typeof (credentials === null || credentials === void 0 ? void 0 : credentials.userId) === 'string'
+            ? credentials.userId
+            : undefined;
+        var userPassword = typeof (credentials === null || credentials === void 0 ? void 0 : credentials.userPassword) === 'string'
+            ? credentials.userPassword
+            : undefined;
         var serverUrl = REGIONAL_SERVERS[props.region];
         /*
          * One API instance per configuration node.
@@ -107,8 +113,8 @@ module.exports = function (RED) {
          * All cloud nodes using this configuration share the
          * same SomfyCloudApi instance and authenticated session.
          */
-        var api = serverUrl && (credentials === null || credentials === void 0 ? void 0 : credentials.userId) && (credentials === null || credentials === void 0 ? void 0 : credentials.userPassword)
-            ? new somfy_cloud_api_1.SomfyCloudApi(credentials.userId, credentials.userPassword, serverUrl)
+        var api = serverUrl && userId && userPassword
+            ? new somfy_cloud_api_1.SomfyCloudApi(userId, userPassword, serverUrl)
             : null;
         /*
          * Shared scenario cache.
@@ -452,17 +458,6 @@ module.exports = function (RED) {
                     storedCredentials = configNode === null || configNode === void 0 ? void 0 : configNode.credentials;
                     userId = submittedUserId || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userId);
                     userPassword = submittedPassword || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userPassword);
-                    // TEMPORARY DIAGNOSTICS
-                    console.log('[Somfy Config] Password diagnostics:', {
-                        length: userPassword === null || userPassword === void 0 ? void 0 : userPassword.length,
-                        containsEuro: userPassword === null || userPassword === void 0 ? void 0 : userPassword.includes('€'),
-                        containsNonAscii: userPassword
-                            ? /[^\x00-\x7F]/.test(String(userPassword))
-                            : false,
-                        containsEuroCodePoint: userPassword
-                            ? Array.from(String(userPassword)).some(function (c) { return c.codePointAt(0) === 8364; })
-                            : false,
-                    });
                     if (!userId || !userPassword || !serverUrl) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
                         response.json({

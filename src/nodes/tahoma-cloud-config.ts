@@ -82,7 +82,10 @@ export = (RED: nodered.NodeAPI): void => {
   RED.nodes.registerType(
     'tahoma-cloud-config',
     function (
-      this: nodered.Node<TahomaCloudCredentials>,
+      this: nodered.Node<{
+        userId: unknown;
+        userPassword: unknown;
+      }>,
       props: TahomaCloudConfigNodeDef,
     ) {
       RED.nodes.createNode(this, props);
@@ -91,6 +94,17 @@ export = (RED: nodered.NodeAPI): void => {
       this['region'] = props.region;
 
       const credentials = this.credentials;
+
+      const userId =
+        typeof credentials?.userId === 'string'
+          ? credentials.userId
+          : undefined;
+
+      const userPassword =
+        typeof credentials?.userPassword === 'string'
+          ? credentials.userPassword
+          : undefined;
+
       const serverUrl = REGIONAL_SERVERS[props.region];
 
       /*
@@ -100,12 +114,8 @@ export = (RED: nodered.NodeAPI): void => {
        * same SomfyCloudApi instance and authenticated session.
        */
       const api =
-        serverUrl && credentials?.userId && credentials?.userPassword
-          ? new SomfyCloudApi(
-              credentials.userId,
-              credentials.userPassword,
-              serverUrl,
-            )
+        serverUrl && userId && userPassword
+          ? new SomfyCloudApi(userId, userPassword, serverUrl)
           : null;
 
       /*
@@ -450,20 +460,6 @@ export = (RED: nodered.NodeAPI): void => {
 
     const userId = submittedUserId || storedCredentials?.userId;
     const userPassword = submittedPassword || storedCredentials?.userPassword;
-
-    // TEMPORARY DIAGNOSTICS
-    console.log('[Somfy Config] Password diagnostics:', {
-      length: userPassword?.length,
-      containsEuro: userPassword?.includes('€'),
-      containsNonAscii: userPassword
-        ? /[^\x00-\x7F]/.test(String(userPassword))
-        : false,
-      containsEuroCodePoint: userPassword
-        ? Array.from(String(userPassword)).some(
-            (c: string) => c.codePointAt(0) === 8364,
-          )
-        : false,
-    });
 
     if (!userId || !userPassword || !serverUrl) {
       response.status(HttpResponse.BAD_REQUEST);

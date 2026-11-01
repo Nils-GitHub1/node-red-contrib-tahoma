@@ -51,14 +51,27 @@ exports.SomfyCloudApi = void 0;
 var axios_1 = require("axios");
 var somfy_api_1 = require("./somfy-api");
 var SomfyCloudApi = /** @class */ (function () {
-    function SomfyCloudApi(userId, userPassword, serverUrl) {
+    function SomfyCloudApi(userIdOrAuth, userPassword, serverUrl) {
         this.sessionId = null;
-        if (!userId || !userPassword || !serverUrl) {
-            throw new Error('Somfy Cloud: missing credentials or server URL');
+        if (typeof userIdOrAuth === 'string') {
+            if (!userIdOrAuth || !userPassword || !serverUrl) {
+                throw new Error('Somfy Cloud: missing legacy credentials or server URL');
+            }
+            this.authMethod = 'legacy';
+            this.userId = userIdOrAuth;
+            this.userPassword = userPassword;
+            this.serverUrl = serverUrl.replace(/\/+$/, '');
         }
-        this.userId = userId;
-        this.userPassword = userPassword;
-        this.serverUrl = serverUrl.replace(/\/+$/, '');
+        else {
+            if (!userIdOrAuth) {
+                throw new Error('Somfy Cloud: OAuth authentication instance is required');
+            }
+            this.authMethod = 'oauth';
+            this.oauthAuth = userIdOrAuth;
+            // The OAuth endpoint is determined by the selected
+            // Somfy installation, not by the legacy region setting.
+            this.serverUrl = '';
+        }
         this.axiosInstance = axios_1.default.create({
             timeout: 20000,
             headers: {
@@ -67,21 +80,44 @@ var SomfyCloudApi = /** @class */ (function () {
         });
     }
     /**
-     * Authenticate against the Somfy Overkiz cloud.
+     * Authenticate against Somfy Cloud.
      *
-     * Uses SomfyApi.getSessionId() to authenticate and retrieve
-     * the JSESSIONID cookie.
-     *
-     * Authentication is explicitly controlled by the configuration node.
-     * This method must not be called for every API request.
+     * The authentication strategy is selected by the constructor.
      */
     SomfyCloudApi.prototype.login = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(this.authMethod === 'legacy')) return [3 /*break*/, 2];
+                        return [4 /*yield*/, this.loginLegacy()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/];
+                    case 2:
+                        if (!this.oauthAuth) {
+                            throw new Error('Somfy Cloud: OAuth authentication is unavailable');
+                        }
+                        return [4 /*yield*/, this.oauthAuth.login()];
+                    case 3:
+                        _a.sent();
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Legacy JSESSIONID authentication.
+     */
+    SomfyCloudApi.prototype.loginLegacy = function () {
         return __awaiter(this, void 0, void 0, function () {
             var sessionId, error_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        // Clear any previous local session before authenticating.
+                        if (!this.userId || !this.userPassword) {
+                            throw new Error('Somfy Cloud: legacy credentials are missing');
+                        }
                         this.sessionId = null;
                         _a.label = 1;
                     case 1:
@@ -98,7 +134,7 @@ var SomfyCloudApi = /** @class */ (function () {
                     case 3:
                         error_1 = _a.sent();
                         this.sessionId = null;
-                        // Preserve the original error, including Axios HTTP details.
+                        // Preserve the original Axios or authentication error.
                         throw error_1;
                     case 4: return [2 /*return*/];
                 }
@@ -106,20 +142,21 @@ var SomfyCloudApi = /** @class */ (function () {
         });
     };
     /**
-     * Check whether a local session identifier is available.
+     * Check whether a local authentication context is available.
      *
-     * This is a local check only.
-     * It does not generate an HTTP request to Somfy.
+     * This is a local check only and does not make an HTTP request.
      */
     SomfyCloudApi.prototype.hasSession = function () {
-        return this.sessionId !== null;
+        var _a;
+        if (this.authMethod === 'legacy') {
+            return this.sessionId !== null;
+        }
+        return ((_a = this.oauthAuth) === null || _a === void 0 ? void 0 : _a.isAuthenticated()) === true;
     };
     /**
-     * Check whether the current session is still valid.
+     * Check whether the current session is valid.
      *
-     * This method performs a real request to the actionGroups endpoint.
-     * Avoid calling it during normal operation because it generates
-     * additional traffic to Somfy Cloud.
+     * This performs an actual request to actionGroups.
      */
     SomfyCloudApi.prototype.isAuthenticated = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -127,7 +164,7 @@ var SomfyCloudApi = /** @class */ (function () {
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
-                        if (!this.sessionId) {
+                        if (!this.hasSession()) {
                             return [2 /*return*/, false];
                         }
                         _b.label = 1;
@@ -154,7 +191,7 @@ var SomfyCloudApi = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, this.request({
-                            url: "".concat(this.serverUrl, "/actionGroups"),
+                            url: "".concat(this.getEndpoint(), "actionGroups"),
                             method: 'GET',
                         })];
                     case 1:
@@ -164,7 +201,6 @@ var SomfyCloudApi = /** @class */ (function () {
                             throw new Error('Invalid action groups response from Somfy Cloud: ' +
                                 'expected an array');
                         }
-                        // Validate the essential properties of each scenario.
                         for (_i = 0, actionGroups_1 = actionGroups; _i < actionGroups_1.length; _i++) {
                             group = actionGroups_1[_i];
                             if (!group ||
@@ -181,6 +217,8 @@ var SomfyCloudApi = /** @class */ (function () {
     };
     /**
      * Execute an existing TaHoma scenario.
+     *
+     * Execution is deliberately not retried automatically.
      */
     SomfyCloudApi.prototype.executeActionGroup = function (actionGroupId) {
         return __awaiter(this, void 0, void 0, function () {
@@ -192,7 +230,7 @@ var SomfyCloudApi = /** @class */ (function () {
                             throw new Error('Action group ID is required');
                         }
                         return [4 /*yield*/, this.request({
-                                url: "".concat(this.serverUrl, "/exec/").concat(encodeURIComponent(actionGroupId)),
+                                url: "".concat(this.getEndpoint(), "exec/") + encodeURIComponent(actionGroupId),
                                 method: 'POST',
                             })];
                     case 1:
@@ -208,36 +246,114 @@ var SomfyCloudApi = /** @class */ (function () {
         });
     };
     /**
-     * Invalidate the current local session.
+     * Resolve the active cloud API endpoint.
      *
-     * Used by the configuration node when Somfy indicates that
-     * the session has expired or is no longer authorised.
+     * Legacy:
+     * Uses the regional URL supplied to the constructor.
      *
-     * Does not perform an HTTP request.
+     * OAuth:
+     * Uses the endpoint selected by SomfyCloudNewAuth.
      */
-    SomfyCloudApi.prototype.invalidateSession = function () {
-        this.sessionId = null;
+    SomfyCloudApi.prototype.getEndpoint = function () {
+        if (this.authMethod === 'legacy') {
+            return "".concat(this.serverUrl.replace(/\/+$/, ''), "/");
+        }
+        if (!this.oauthAuth) {
+            throw new Error('Somfy Cloud: OAuth authentication is unavailable');
+        }
+        return this.oauthAuth.endpoint;
     };
     /**
-     * Clear the local cloud session.
+     * Generate the authentication headers.
      *
-     * This does not revoke the session on the Somfy server.
+     * Legacy:
+     * Cookie: JSESSIONID=...
+     *
+     * OAuth:
+     * Authorization: Bearer ...
      */
-    SomfyCloudApi.prototype.logout = function () {
-        this.invalidateSession();
+    SomfyCloudApi.prototype.getAuthenticationHeaders = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                if (this.authMethod === 'legacy') {
+                    if (!this.sessionId) {
+                        throw new Error('Not authenticated with Somfy Cloud');
+                    }
+                    return [2 /*return*/, {
+                            Cookie: "JSESSIONID=".concat(this.sessionId),
+                        }];
+                }
+                if (!this.oauthAuth) {
+                    throw new Error('Somfy Cloud: OAuth authentication is unavailable');
+                }
+                return [2 /*return*/, this.oauthAuth.getAuthHeaders()];
+            });
+        });
     };
     /**
-     * Perform an authenticated cloud request.
+     * Execute an authenticated cloud API request.
      *
-     * Axios errors are deliberately preserved so that callers
-     * can inspect HTTP status, response data and error codes.
+     * The OAuth authentication strategy automatically handles
+     * access-token expiration and refresh before returning headers.
+     *
+     * Axios errors are deliberately preserved so that the
+     * configuration node can inspect HTTP status and error codes.
      */
     SomfyCloudApi.prototype.request = function (options) {
-        if (!this.sessionId) {
-            return Promise.reject(new Error('Not authenticated with Somfy Cloud'));
+        return __awaiter(this, void 0, void 0, function () {
+            var authHeaders, config;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, this.getAuthenticationHeaders()];
+                    case 1:
+                        authHeaders = _a.sent();
+                        config = __assign(__assign({}, options), { headers: __assign(__assign({}, options.headers), authHeaders) });
+                        return [2 /*return*/, this.axiosInstance.request(config)];
+                }
+            });
+        });
+    };
+    /**
+     * Invalidate the current local session.
+     *
+     * Legacy:
+     * Clears the JSESSIONID.
+     *
+     * OAuth:
+     * Does not delete the refresh token. A subsequent request
+     * can continue using the OAuth refresh mechanism.
+     */
+    SomfyCloudApi.prototype.invalidateSession = function () {
+        if (this.authMethod === 'legacy') {
+            this.sessionId = null;
         }
-        var config = __assign(__assign({}, options), { headers: __assign(__assign({}, options.headers), { Cookie: "JSESSIONID=".concat(this.sessionId) }) });
-        return this.axiosInstance.request(config);
+    };
+    /**
+     * Clear the local authentication context.
+     *
+     * This does not revoke tokens or sessions on Somfy servers.
+     */
+    SomfyCloudApi.prototype.logout = function () {
+        var _a;
+        if (this.authMethod === 'legacy') {
+            this.invalidateSession();
+            return;
+        }
+        (_a = this.oauthAuth) === null || _a === void 0 ? void 0 : _a.logout();
+    };
+    /**
+     * Return the selected authentication method.
+     */
+    SomfyCloudApi.prototype.getAuthMethod = function () {
+        return this.authMethod;
+    };
+    /**
+     * Return the OAuth authentication instance.
+     *
+     * Returns undefined when using legacy authentication.
+     */
+    SomfyCloudApi.prototype.getOAuthAuth = function () {
+        return this.oauthAuth;
     };
     return SomfyCloudApi;
 }());

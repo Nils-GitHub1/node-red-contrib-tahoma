@@ -108,16 +108,6 @@ var SomfyApi = /** @class */ (function () {
                             userId: userId,
                             userPassword: userPwd,
                         });
-                        // TEMPORARY DIAGNOSTICS
-                        // Never log the actual password or encoded credentials.
-                        console.log('[Somfy Auth] Request diagnostics:', {
-                            endpoint: "".concat(somfyOverkizSrvUrl.replace(/\/+$/, ''), "/login"),
-                            method: 'POST',
-                            contentType: 'application/x-www-form-urlencoded',
-                            passwordLength: userPwd.length,
-                            passwordContainsEuro: userPwd.includes('€'),
-                            encodedPasswordContainsEuro: loginData.toString().includes('%E2%82%AC'),
-                        });
                         _c.label = 1;
                     case 1:
                         _c.trys.push([1, 3, , 4]);

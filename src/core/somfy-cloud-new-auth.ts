@@ -1,3 +1,4 @@
+
 import axios, { AxiosError, AxiosInstance } from 'axios';
 
 /* -------------------------------------------------------------------------- */
@@ -8,7 +9,6 @@ const SOMFY_API = 'https://accounts.somfy.com';
 
 const SOMFY_CLIENT_ID =
   '0d8e920c-1478-11e7-a377-02dd59bd3041_1ewvaqmclfogo4kcsoo0c8k4kso884owg08sg8c40sk4go4ksg';
-
 const SOMFY_CLIENT_SECRET =
   '12k73w1n540g8o4cokg0cw84cog840k84cwggscwg884004kgk';
 
@@ -22,7 +22,6 @@ const SOMFY_GINAITE_TOKEN_EXCHANGE_GRANT =
 
 const SOMFY_GINAITE_SUBJECT_TOKEN_TYPE =
   'urn:ietf:params:oauth:token-type:access_token';
-
 const SOMFY_BOB_SITE_API =
   'https://backoffice-service.ovkube.net/site-api/public/v1';
 
@@ -37,7 +36,6 @@ const TOKEN_EXPIRY_MARGIN_MS = 30_000;
 const FALLBACK_TOKEN_LIFETIME_MS = 5 * 60 * 1000;
 
 const DEFAULT_REGION = 'EMEA';
-
 /* -------------------------------------------------------------------------- */
 /* Regional endpoints                                                         */
 /* -------------------------------------------------------------------------- */
@@ -49,7 +47,6 @@ const REGION_ENDPOINTS: Record<string, string> = {
 
   SNABA: 'https://ha401-1.overkiz.com/enduser-mobile-web/enduserAPI/',
 };
-
 /* -------------------------------------------------------------------------- */
 /* Country mapping                                                            */
 /* -------------------------------------------------------------------------- */
@@ -59,7 +56,6 @@ const COUNTRY_REGIONS: Record<string, string> = {
   CA: 'SNABA',
   US: 'SNABA',
   MX: 'SNABA',
-
   // Asia Pacific
   AU: 'APAC',
   HK: 'APAC',
@@ -75,7 +71,6 @@ const COUNTRY_REGIONS: Record<string, string> = {
   VN: 'APAC',
   KR: 'APAC',
   CN: 'APAC',
-
   // Europe, Middle East and Africa
   AL: 'EMEA',
   AD: 'EMEA',
@@ -136,7 +131,6 @@ const COUNTRY_REGIONS: Record<string, string> = {
   UA: 'EMEA',
   AE: 'EMEA',
   GB: 'EMEA',
-
   // Additional EMEA countries
   AM: 'EMEA',
   AO: 'EMEA',
@@ -177,7 +171,6 @@ const COUNTRY_REGIONS: Record<string, string> = {
   ZM: 'EMEA',
   ZW: 'EMEA',
 };
-
 /* -------------------------------------------------------------------------- */
 /* Public interfaces                                                          */
 /* -------------------------------------------------------------------------- */
@@ -194,7 +187,6 @@ export interface ISomfyAuthOptions {
 
   region?: string;
 }
-
 export interface ISomfyGatewayCandidate {
   gatewayId: string;
   homeId: string;
@@ -211,7 +203,6 @@ export interface ISomfyTokenState {
   gatewayId: string;
   region: string;
 }
-
 /* -------------------------------------------------------------------------- */
 /* Internal interfaces                                                        */
 /* -------------------------------------------------------------------------- */
@@ -229,7 +220,6 @@ interface ISomfyTokenResponse {
 interface ISomfyBobGateway {
   gatewayId?: string;
 }
-
 interface ISomfyBobRole {
   roleOID?: string;
 }
@@ -252,7 +242,6 @@ interface ISomfyBobResponse {
   results?: ISomfyBobSite[];
   totalCount?: number;
 }
-
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -263,7 +252,6 @@ export class SomfyAuthError extends Error {
 
   constructor(message: string, status?: number, code?: string) {
     super(message);
-
     this.name = 'SomfyAuthError';
     this.status = status;
     this.code = code;
@@ -285,7 +273,6 @@ export class SomfyBadCredentialsError extends SomfyAuthError {
 export class SomfyNoGatewaySelectedError extends SomfyAuthError {
   constructor(message: string) {
     super(message);
-
     this.name = 'SomfyNoGatewaySelectedError';
 
     Object.setPrototypeOf(this, SomfyNoGatewaySelectedError.prototype);
@@ -300,7 +287,6 @@ export class SomfyCloudNewAuth {
   private readonly username?: string;
 
   private readonly password?: string;
-
   private readonly axiosInstance: AxiosInstance;
 
   private accessToken: string | null = null;
@@ -320,7 +306,6 @@ export class SomfyCloudNewAuth {
   private selectedRegion: string | null = null;
 
   private selectedEndpoint: string | null = null;
-
   private refreshPromise: Promise<void> | null = null;
 
   private loginPromise: Promise<void> | null = null;
@@ -334,7 +319,6 @@ export class SomfyCloudNewAuth {
   private loggedIn = false;
 
   private closed = false;
-
   /**
    * Create a new Somfy OAuth authentication instance.
    *
@@ -354,7 +338,6 @@ export class SomfyCloudNewAuth {
     this.persistedRefreshToken = options.refreshToken || null;
 
     this.selectedSiteOid = options.siteOid || null;
-
     this.selectedGatewayId = options.gatewayId || null;
 
     this.selectedRegion = options.region || null;
@@ -373,7 +356,6 @@ export class SomfyCloudNewAuth {
 
     this.axiosInstance = axios.create({
       timeout: 20000,
-
       headers: {
         Accept: 'application/json',
       },
@@ -383,7 +365,6 @@ export class SomfyCloudNewAuth {
   /* ---------------------------------------------------------------------- */
   /* Authentication                                                         */
   /* ---------------------------------------------------------------------- */
-
   /**
    * Authenticate using either a fresh login or a stored session.
    *
@@ -397,7 +378,6 @@ export class SomfyCloudNewAuth {
     if (this.loginPromise) {
       return this.loginPromise;
     }
-
     this.loginPromise = (async () => {
       try {
         /*
@@ -418,7 +398,6 @@ export class SomfyCloudNewAuth {
 
           return;
         }
-
         /*
          * Fresh password authentication.
          */
@@ -435,7 +414,6 @@ export class SomfyCloudNewAuth {
             'Somfy password grant did not return an access token',
           );
         }
-
         /*
          * Exchange the Somfy Accounts token
          * for a Ginaite account-wide token.
@@ -449,13 +427,11 @@ export class SomfyCloudNewAuth {
         }
 
         this.loggedIn = true;
-
         /*
          * Discover all installations associated
          * with the Somfy account.
          */
         await this.discoverGateways();
-
         /*
          * Automatically select the only available
          * installation.
@@ -470,7 +446,6 @@ export class SomfyCloudNewAuth {
           const existingGateway = this.gateways.find(
             (gateway) => gateway.gatewayId === this.selectedGatewayId,
           );
-
           if (existingGateway) {
             this.selectGateway(existingGateway.gatewayId);
           } else {
@@ -494,7 +469,6 @@ export class SomfyCloudNewAuth {
 
     return this.loginPromise;
   }
-
   /* ---------------------------------------------------------------------- */
   /* Somfy password authentication                                          */
   /* ---------------------------------------------------------------------- */
@@ -508,7 +482,6 @@ export class SomfyCloudNewAuth {
     const body = new URLSearchParams();
 
     body.append('grant_type', 'password');
-
     body.append('client_id', SOMFY_CLIENT_ID);
 
     body.append('client_secret', SOMFY_CLIENT_SECRET);
@@ -518,7 +491,6 @@ export class SomfyCloudNewAuth {
     body.append('password', this.password!);
 
     let response;
-
     try {
       response = await this.axiosInstance.post<ISomfyTokenResponse>(
         `${SOMFY_API}/oauth/oauth/v2/token/jwt`,
@@ -534,7 +506,6 @@ export class SomfyCloudNewAuth {
     }
 
     const token = response.data;
-
     if (
       token.message === 'error.invalid.grant' ||
       token.error === 'invalid_grant'
@@ -562,13 +533,9 @@ export class SomfyCloudNewAuth {
     const body = new URLSearchParams();
 
     body.append('grant_type', SOMFY_GINAITE_TOKEN_EXCHANGE_GRANT);
-
     body.append('client_id', SOMFY_CLIENT_ID);
-
     body.append('subject_token', ssoAccessToken);
-
     body.append('subject_issuer', SOMFY_GINAITE_SUBJECT_ISSUER);
-
     body.append('subject_token_type', SOMFY_GINAITE_SUBJECT_TOKEN_TYPE);
 
     let response;
@@ -584,7 +551,10 @@ export class SomfyCloudNewAuth {
         },
       );
     } catch (error) {
-      throw this.mapHttpError(error, 'Somfy Ginaite token exchange failed');
+      throw this.mapHttpError(
+        error,
+        'Somfy Ginaite token exchange failed',
+      );
     }
 
     this.updateToken(response.data);
@@ -614,7 +584,6 @@ export class SomfyCloudNewAuth {
     const candidates: ISomfyGatewayCandidate[] = [];
 
     let sitesSeen = 0;
-
     let totalCount = 0;
 
     for (
@@ -627,11 +596,11 @@ export class SomfyCloudNewAuth {
       );
 
       const page = data as ISomfyBobResponse;
-
-      const results = page.results || [];
+      const results = Array.isArray(page.results)
+        ? page.results
+        : [];
 
       totalCount = Number(page.totalCount || 0);
-
       sitesSeen += results.length;
 
       for (const site of results) {
@@ -642,7 +611,6 @@ export class SomfyCloudNewAuth {
         }
 
         const region = this.regionForCountry(site.country);
-
         const subSites = site.subSites || [];
 
         /*
@@ -659,20 +627,17 @@ export class SomfyCloudNewAuth {
 
           candidates.push({
             gatewayId: gateway.gatewayId,
-
             homeId: siteOid,
-
             label: site.name || siteOid,
-
             externalId: subSite.externalId,
-
             country: site.country,
-
             region,
-
             roles: roles
               .map((role) => role.roleOID)
-              .filter((role): role is string => typeof role === 'string'),
+              .filter(
+                (role): role is string =>
+                  typeof role === 'string',
+              ),
           });
         }
       }
@@ -691,19 +656,23 @@ export class SomfyCloudNewAuth {
 
     this.gateways = candidates;
 
-    return this.gateways;
+    return this.availableGateways;
   }
 
   /* ---------------------------------------------------------------------- */
-  /* BOB API requests                                                        */
+  /* BOB API requests                                                       */
   /* ---------------------------------------------------------------------- */
 
   /**
    * Make an authenticated BOB API request.
    */
-  private async bobGet(path: string): Promise<Record<string, unknown>> {
+  private async bobGet(
+    path: string,
+  ): Promise<Record<string, unknown>> {
     if (!this.accessToken) {
-      throw new SomfyAuthError('No Ginaite access token available for BOB');
+      throw new SomfyAuthError(
+        'No Ginaite access token available for BOB',
+      );
     }
 
     try {
@@ -712,7 +681,6 @@ export class SomfyCloudNewAuth {
         {
           headers: {
             Authorization: `Bearer ${this.accessToken}`,
-
             'X-Api-Key': SOMFY_BOB_API_KEY,
           },
         },
@@ -720,7 +688,10 @@ export class SomfyCloudNewAuth {
 
       return response.data as Record<string, unknown>;
     } catch (error) {
-      throw this.mapHttpError(error, 'Somfy BOB site discovery failed');
+      throw this.mapHttpError(
+        error,
+        'Somfy BOB site discovery failed',
+      );
     }
   }
 
@@ -730,7 +701,11 @@ export class SomfyCloudNewAuth {
    * BOB discovery requires an account-wide token.
    */
   private async ensureAccountToken(): Promise<void> {
-    if (this.accessToken && !this.isExpired() && this.tokenSiteOid === null) {
+    if (
+      this.accessToken &&
+      !this.isExpired() &&
+      this.tokenSiteOid === null
+    ) {
       return;
     }
 
@@ -764,12 +739,20 @@ export class SomfyCloudNewAuth {
    * - Regional API endpoint
    */
   public selectGateway(gatewayId: string): void {
+    if (!gatewayId || typeof gatewayId !== 'string') {
+      throw new SomfyNoGatewaySelectedError(
+        'A valid Somfy gateway ID is required',
+      );
+    }
+
     const gateway = this.gateways.find(
       (candidate) => candidate.gatewayId === gatewayId,
     );
 
     if (!gateway) {
-      throw new SomfyAuthError(`Unknown Somfy gateway ID: ${gatewayId}`);
+      throw new SomfyAuthError(
+        `Unknown Somfy gateway ID: ${gatewayId}`,
+      );
     }
 
     const endpoint = REGION_ENDPOINTS[gateway.region];
@@ -780,19 +763,23 @@ export class SomfyCloudNewAuth {
       );
     }
 
+    const selectionChanged =
+      this.selectedGatewayId !== gateway.gatewayId ||
+      this.selectedSiteOid !== gateway.homeId ||
+      this.selectedRegion !== gateway.region;
+
     this.selectedGatewayId = gateway.gatewayId;
-
     this.selectedSiteOid = gateway.homeId;
-
     this.selectedRegion = gateway.region;
-
     this.selectedEndpoint = endpoint;
 
     /*
      * Force generation of a site-scoped token
-     * on the next regional API request.
+     * when the installation changes.
      */
-    this.expiresAt = 0;
+    if (selectionChanged) {
+      this.expiresAt = 0;
+    }
   }
 
   /**
@@ -836,7 +823,7 @@ export class SomfyCloudNewAuth {
   /**
    * Refresh the token if necessary.
    *
-   * Concurrent callers share one refresh Promise.
+   * Concurrent callers share the same refresh operation.
    */
   public async refreshIfNeeded(): Promise<boolean> {
     if (!this.isExpired()) {
@@ -859,29 +846,72 @@ export class SomfyCloudNewAuth {
   }
 
   /**
-   * Serialize refresh requests.
+   * Serialize refresh operations.
    *
-   * This is important because Ginaite may rotate refresh tokens.
+   * Ginaite may rotate refresh tokens.
+   *
+   * A request for a different token scope must wait for
+   * the current refresh operation before starting another.
    */
-  private async refreshTokenWithLock(siteOid: string | null): Promise<void> {
-    if (this.refreshPromise) {
-      await this.refreshPromise;
+  private async refreshTokenWithLock(
+    siteOid: string | null,
+  ): Promise<void> {
+    while (true) {
+      if (this.closed) {
+        throw new SomfyAuthError(
+          'Somfy authentication instance is closed',
+        );
+      }
 
       /*
-       * Another request may already have generated
-       * a token with the requested scope.
+       * Another request is currently refreshing the token.
        */
-      if (!this.isExpired() && this.tokenSiteOid === siteOid) {
+      if (this.refreshPromise) {
+        await this.refreshPromise;
+
+        /*
+         * The other operation may already have produced
+         * the correct token.
+         */
+        if (
+          !this.isExpired() &&
+          this.tokenSiteOid === siteOid
+        ) {
+          return;
+        }
+
+        /*
+         * Otherwise continue and generate the required scope.
+         */
+        continue;
+      }
+
+      /*
+       * Recheck after obtaining the refresh opportunity.
+       */
+      if (
+        !this.isExpired() &&
+        this.tokenSiteOid === siteOid
+      ) {
         return;
       }
-    }
 
-    this.refreshPromise = this.performRefresh(siteOid);
+      const refreshOperation = this.performRefresh(siteOid);
 
-    try {
-      await this.refreshPromise;
-    } finally {
-      this.refreshPromise = null;
+      this.refreshPromise = refreshOperation;
+
+      try {
+        await refreshOperation;
+      } finally {
+        /*
+         * Do not clear another operation's Promise.
+         */
+        if (this.refreshPromise === refreshOperation) {
+          this.refreshPromise = null;
+        }
+      }
+
+      return;
     }
   }
 
@@ -893,9 +923,13 @@ export class SomfyCloudNewAuth {
    *
    * Otherwise, an account-wide token is requested.
    */
-  private async performRefresh(siteOid: string | null): Promise<void> {
+  private async performRefresh(
+    siteOid: string | null,
+  ): Promise<void> {
     if (!this.refreshToken) {
-      throw new SomfyAuthError('No Somfy refresh token available');
+      throw new SomfyAuthError(
+        'No Somfy refresh token available',
+      );
     }
 
     const previousRefreshToken = this.refreshToken;
@@ -909,9 +943,7 @@ export class SomfyCloudNewAuth {
     const body = new URLSearchParams();
 
     body.append('grant_type', 'refresh_token');
-
     body.append('client_id', SOMFY_CLIENT_ID);
-
     body.append('refresh_token', previousRefreshToken);
 
     let response;
@@ -932,34 +964,60 @@ export class SomfyCloudNewAuth {
         error_description?: string;
       }>;
 
-      if (axiosError.response?.data?.error === 'invalid_grant') {
+      if (
+        axiosError.response?.data?.error === 'invalid_grant'
+      ) {
         throw new SomfyBadCredentialsError(
           axiosError.response.data.error_description ||
             'Somfy refresh token has been revoked',
         );
       }
 
-      throw this.mapHttpError(error, 'Somfy token refresh failed');
+      throw this.mapHttpError(
+        error,
+        'Somfy token refresh failed',
+      );
     }
 
     const token = response.data;
 
+    /*
+     * Never accept an incomplete refresh response.
+     *
+     * Retaining an old access token here could incorrectly
+     * make the session appear valid.
+     */
+    if (!token.access_token) {
+      throw new SomfyAuthError(
+        'Somfy token refresh returned no access token',
+      );
+    }
+
+    /*
+     * Preserve the old refresh token when the server
+     * does not issue a replacement.
+     */
+    if (!token.refresh_token) {
+      token.refresh_token = previousRefreshToken;
+    }
+
     this.updateToken(token);
 
-    if (typeof token.expires_in !== 'number' || token.expires_in <= 0) {
-      this.expiresAt = Date.now() + FALLBACK_TOKEN_LIFETIME_MS;
+    if (
+      typeof token.expires_in !== 'number' ||
+      !Number.isFinite(token.expires_in) ||
+      token.expires_in <= 0
+    ) {
+      this.expiresAt =
+        Date.now() + FALLBACK_TOKEN_LIFETIME_MS;
     }
 
     this.tokenSiteOid = siteOid;
 
     /*
-     * Keep the existing refresh token if the server
-     * does not return a replacement.
+     * Persist the rotated refresh token before reporting
+     * the refresh operation as successful.
      */
-    if (!this.refreshToken) {
-      this.refreshToken = previousRefreshToken;
-    }
-
     await this.notifyTokenRefresh();
   }
 
@@ -976,17 +1034,32 @@ export class SomfyCloudNewAuth {
    * - gatewayId
    * - region
    *
-   * This ensures that a restored session can identify
-   * the correct Somfy installation.
+   * The access token is never persisted.
    */
   private async notifyTokenRefresh(): Promise<void> {
     if (!this.refreshToken) {
       return;
     }
 
+    /*
+     * An account-wide token may exist before the user
+     * has selected an installation.
+     *
+     * Such a token cannot yet be exported as a complete
+     * Node-RED installation credential.
+     */
+    if (
+      !this.selectedSiteOid ||
+      !this.selectedGatewayId ||
+      !this.selectedRegion
+    ) {
+      return;
+    }
+
     const session = this.getSession();
 
-    const changed = session.refreshToken !== this.persistedRefreshToken;
+    const changed =
+      session.refreshToken !== this.persistedRefreshToken;
 
     if (!changed) {
       return;
@@ -1008,11 +1081,25 @@ export class SomfyCloudNewAuth {
     try {
       await this.tokenRefreshCallback(session);
 
+      /*
+       * Update persistence state only after the callback
+       * has completed successfully.
+       */
       this.persistedRefreshToken = session.refreshToken;
-    } catch (error) {
-      console.error(
-        '[Somfy OAuth] Unable to persist the updated session:',
-        error instanceof Error ? error.message : 'Unknown persistence error',
+
+      this.warnedMissingCallback = false;
+    } catch {
+      /*
+       * Do not log the callback error itself because it
+       * could accidentally contain credential information.
+       *
+       * Do not silently treat the token as persisted.
+       */
+      throw new SomfyAuthError(
+        'Somfy authentication was refreshed, but the updated session could not be persisted. ' +
+          'Check Node-RED credential storage before retrying.',
+        undefined,
+        'SESSION_PERSISTENCE_FAILED',
       );
     }
   }
@@ -1043,11 +1130,8 @@ export class SomfyCloudNewAuth {
 
     return {
       refreshToken: this.refreshToken,
-
       siteOid: this.selectedSiteOid,
-
       gatewayId: this.selectedGatewayId,
-
       region: this.selectedRegion,
     };
   }
@@ -1062,6 +1146,8 @@ export class SomfyCloudNewAuth {
 
     this.persistedRefreshToken = session.refreshToken;
 
+    this.warnedMissingCallback = false;
+
     return session;
   }
 
@@ -1070,35 +1156,69 @@ export class SomfyCloudNewAuth {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Return the authentication headers for the OverKiz API.
+   * Return the authorization headers for the selected installation.
+   *
+   * Ensures that a valid site-scoped token is available.
    */
-  public async getAuthHeaders(): Promise<{ [key: string]: string }> {
-    if (!this.loggedIn) {
-      throw new SomfyAuthError('Somfy account is not authenticated');
-    }
-
-    if (!this.selectedSiteOid) {
-      throw new SomfyNoGatewaySelectedError(
-        'No Somfy installation selected. ' +
-          'Call discoverGateways() and selectGateway() first.',
-      );
-    }
-
-    await this.refreshIfNeeded();
+  public async getHeaders(): Promise<Record<string, string>> {
+    await this.ensureSiteToken();
 
     if (!this.accessToken) {
-      throw new SomfyAuthError('No valid Somfy access token available');
-    }
-
-    if (this.tokenSiteOid !== this.selectedSiteOid) {
       throw new SomfyAuthError(
-        'Somfy access token is not scoped to the selected installation',
+        'No Somfy access token available',
       );
     }
 
     return {
       Authorization: `Bearer ${this.accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
     };
+  }
+
+  /**
+   * Ensure that a valid token scoped to the selected installation
+   * is available.
+   */
+  private async ensureSiteToken(): Promise<void> {
+    if (this.closed) {
+      throw new SomfyAuthError(
+        'Somfy authentication instance is closed',
+      );
+    }
+
+    if (!this.selectedSiteOid || !this.selectedGatewayId) {
+      throw new SomfyNoGatewaySelectedError(
+        'No Somfy gateway has been selected',
+      );
+    }
+
+    if (!this.selectedRegion || !this.selectedEndpoint) {
+      throw new SomfyAuthError(
+        'No regional Somfy API endpoint is configured',
+      );
+    }
+
+    if (
+      !this.isExpired() &&
+      this.tokenSiteOid === this.selectedSiteOid
+    ) {
+      return;
+    }
+
+    if (!this.refreshToken) {
+      throw new SomfyAuthError(
+        'No Somfy refresh token available',
+      );
+    }
+
+    await this.refreshTokenWithLock(this.selectedSiteOid);
+
+    if (!this.accessToken || this.isExpired()) {
+      throw new SomfyAuthError(
+        'Unable to obtain a valid Somfy site-scoped access token',
+      );
+    }
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1106,11 +1226,13 @@ export class SomfyCloudNewAuth {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Return the selected OverKiz API endpoint.
+   * Return the selected regional API endpoint.
    */
   public get endpoint(): string {
     if (!this.selectedEndpoint) {
-      throw new SomfyNoGatewaySelectedError('No Somfy installation selected');
+      throw new SomfyNoGatewaySelectedError(
+        'No Somfy gateway has been selected',
+      );
     }
 
     return this.selectedEndpoint;
@@ -1119,22 +1241,15 @@ export class SomfyCloudNewAuth {
   /**
    * Return the selected site OID.
    */
-  public get selectedSite(): string | null {
+  public get siteOid(): string | null {
     return this.selectedSiteOid;
   }
 
   /**
    * Return the selected gateway ID.
    */
-  public get selectedGateway(): string | null {
+  public get gatewayId(): string | null {
     return this.selectedGatewayId;
-  }
-
-  /**
-   * Return the discovered installations.
-   */
-  public get availableGateways(): ISomfyGatewayCandidate[] {
-    return [...this.gateways];
   }
 
   /**
@@ -1145,10 +1260,141 @@ export class SomfyCloudNewAuth {
   }
 
   /**
-   * Check whether authentication has been initialized.
+   * Return the available gateways.
+   *
+   * A copy is returned to prevent external modification
+   * of the internal gateway list.
+   */
+  public get availableGateways(): ISomfyGatewayCandidate[] {
+    return this.gateways.map((gateway) => ({
+      ...gateway,
+      roles: [...gateway.roles],
+    }));
+  }
+
+  /**
+   * Return whether authentication has been initialized.
    */
   public isAuthenticated(): boolean {
-    return this.loggedIn && !!this.refreshToken;
+  return this.loggedIn && !this.closed;
+}
+
+  /**
+   * Authentication headers. This preserves the existing getHeaders() implementation while satisfying SomfyCloudApi.
+   */
+public async getAuthHeaders(): Promise<Record<string, string>> {
+  return this.getHeaders();
+}
+
+  /**
+   * Return whether a gateway has been selected.
+   */
+  public get hasSelectedGateway(): boolean {
+    return Boolean(
+      this.selectedGatewayId &&
+        this.selectedSiteOid &&
+        this.selectedEndpoint,
+    );
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Token management                                                       */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Update the current access and refresh tokens.
+   */
+  private updateToken(token: ISomfyTokenResponse): void {
+    if (!token.access_token) {
+      throw new SomfyAuthError(
+        'Somfy authentication response contains no access token',
+      );
+    }
+
+    this.accessToken = token.access_token;
+
+    /*
+     * Refresh tokens may be rotated by Ginaite.
+     * Preserve the previous token when no replacement is returned.
+     */
+    if (token.refresh_token) {
+      this.refreshToken = token.refresh_token;
+    }
+
+    const expiresIn =
+      typeof token.expires_in === 'number' &&
+      Number.isFinite(token.expires_in) &&
+      token.expires_in > 0
+        ? token.expires_in
+        : FALLBACK_TOKEN_LIFETIME_MS / 1000;
+
+    this.expiresAt = Date.now() + expiresIn * 1000;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Session restoration                                                    */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Restore a previously persisted session.
+   *
+   * This method is useful when the configuration node
+   * receives updated credentials without being recreated.
+   */
+  public restoreSession(session: ISomfyTokenState): void {
+    if (this.closed) {
+      throw new SomfyAuthError(
+        'Cannot restore a closed Somfy authentication instance',
+      );
+    }
+
+    if (
+      !session ||
+      typeof session.refreshToken !== 'string' ||
+      !session.refreshToken ||
+      typeof session.siteOid !== 'string' ||
+      !session.siteOid ||
+      typeof session.gatewayId !== 'string' ||
+      !session.gatewayId ||
+      typeof session.region !== 'string' ||
+      !session.region
+    ) {
+      throw new SomfyAuthError(
+        'Invalid Somfy OAuth session',
+      );
+    }
+
+    const endpoint = REGION_ENDPOINTS[session.region];
+
+    if (!endpoint) {
+      throw new SomfyAuthError(
+        `Unknown Somfy region: ${session.region}`,
+      );
+    }
+
+    this.refreshToken = session.refreshToken;
+
+    this.persistedRefreshToken = session.refreshToken;
+
+    this.selectedSiteOid = session.siteOid;
+
+    this.selectedGatewayId = session.gatewayId;
+
+    this.selectedRegion = session.region;
+
+    this.selectedEndpoint = endpoint;
+
+    /*
+     * The access token is not restored.
+     * A new site-scoped token must be obtained.
+     */
+    this.accessToken = null;
+
+    this.expiresAt = 0;
+
+    this.tokenSiteOid = null;
+
+    this.loggedIn = true;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1156,9 +1402,13 @@ export class SomfyCloudNewAuth {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Clear the in-memory authentication context.
+   * Clear the local authentication session.
    *
-   * This does not revoke tokens on Somfy servers.
+   * This deliberately does not revoke the remote refresh token.
+   * It only clears the credentials and tokens held in memory.
+   *
+   * The method is synchronous for compatibility with existing
+   * SomfyCloudApi logout handling.
    */
   public logout(): void {
     this.closed = true;
@@ -1173,6 +1423,8 @@ export class SomfyCloudNewAuth {
 
     this.tokenSiteOid = null;
 
+    this.gateways = [];
+
     this.selectedSiteOid = null;
 
     this.selectedGatewayId = null;
@@ -1181,34 +1433,9 @@ export class SomfyCloudNewAuth {
 
     this.selectedEndpoint = null;
 
-    this.gateways = [];
+    this.persistedRefreshToken = null;
 
     this.tokenRefreshCallback = undefined;
-
-    this.refreshPromise = null;
-
-    this.loginPromise = null;
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /* Token management                                                       */
-  /* ---------------------------------------------------------------------- */
-
-  /**
-   * Update the local token context from an OAuth response.
-   */
-  private updateToken(token: ISomfyTokenResponse): void {
-    if (token.access_token) {
-      this.accessToken = token.access_token;
-    }
-
-    if (token.refresh_token) {
-      this.refreshToken = token.refresh_token;
-    }
-
-    if (typeof token.expires_in === 'number' && token.expires_in > 0) {
-      this.expiresAt = Date.now() + token.expires_in * 1000;
-    }
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1216,40 +1443,111 @@ export class SomfyCloudNewAuth {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Convert Axios errors into useful authentication errors.
+   * Convert Axios errors into safe Somfy authentication errors.
+   *
+   * Never include request headers, passwords, tokens or request bodies
+   * in an error message.
    */
   private mapHttpError(
     error: unknown,
     fallbackMessage: string,
   ): SomfyAuthError {
+    if (error instanceof SomfyAuthError) {
+      return error;
+    }
+
+    if (!axios.isAxiosError(error)) {
+      return new SomfyAuthError(fallbackMessage);
+    }
+
     const axiosError = error as AxiosError<{
       error?: string;
       error_description?: string;
       message?: string;
     }>;
 
-    if (!axiosError.isAxiosError) {
-      return new SomfyAuthError(
-        error instanceof Error ? error.message : fallbackMessage,
-      );
-    }
-
     const status = axiosError.response?.status;
 
     const responseData = axiosError.response?.data;
 
-    const code = responseData?.error;
+    const errorCode = responseData?.error;
 
-    const message =
-      responseData?.error_description ||
-      responseData?.message ||
-      axiosError.message ||
-      fallbackMessage;
-
-    if (code === 'invalid_grant' || code === 'error.invalid.grant') {
-      return new SomfyBadCredentialsError(message);
+    /*
+     * Invalid credentials or revoked refresh token.
+     */
+    if (
+      errorCode === 'invalid_grant' ||
+      errorCode === 'invalid_credentials' ||
+      status === 401
+    ) {
+      return new SomfyBadCredentialsError(
+        'Somfy authentication failed. Check the credentials or refresh token.',
+      );
     }
 
-    return new SomfyAuthError(`${fallbackMessage}: ${message}`, status, code);
+    /*
+     * Insufficient permissions.
+     */
+    if (status === 403) {
+      return new SomfyAuthError(
+        'Somfy authentication request was forbidden',
+        status,
+        'FORBIDDEN',
+      );
+    }
+
+    /*
+     * Rate limiting.
+     */
+    if (status === 429) {
+      return new SomfyAuthError(
+        'Somfy authentication service rate limit exceeded',
+        status,
+        'RATE_LIMITED',
+      );
+    }
+
+    /*
+     * Server-side errors.
+     */
+    if (status && status >= 500) {
+      return new SomfyAuthError(
+        'Somfy authentication service is temporarily unavailable',
+        status,
+        'SERVER_ERROR',
+      );
+    }
+
+    /*
+     * Network errors.
+     */
+    if (axiosError.code === 'ECONNABORTED') {
+      return new SomfyAuthError(
+        'Somfy authentication request timed out',
+        undefined,
+        'TIMEOUT',
+      );
+    }
+
+    if (
+      axiosError.code === 'ECONNREFUSED' ||
+      axiosError.code === 'ENOTFOUND' ||
+      axiosError.code === 'ECONNRESET'
+    ) {
+      return new SomfyAuthError(
+        'Unable to connect to the Somfy authentication service',
+        undefined,
+        axiosError.code,
+      );
+    }
+
+    /*
+     * Generic HTTP failure.
+     */
+    return new SomfyAuthError(
+      fallbackMessage,
+      status,
+      errorCode || axiosError.code,
+    );
   }
 }

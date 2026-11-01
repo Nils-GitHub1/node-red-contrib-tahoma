@@ -39,7 +39,7 @@
       gatewayId: {
         type: 'text',
       },
-      region: {
+      oauthRegion: {
         type: 'text',
       },
     },
@@ -54,9 +54,9 @@
       const $authMethod = $('#node-config-input-authMethod');
       const $region = $('#node-config-input-region');
       const $gateway = $('#node-config-input-gatewayId');
+      const $testButton = $('#node-config-input-cloud-test');
 
       let discoveredGateways = [];
-
       let lastSuccessfulTest = false;
 
       $authMethod.val(this.authMethod || 'legacy');
@@ -73,27 +73,10 @@
           $('.tahoma-legacy-region').hide();
           $('.tahoma-oauth-info').show();
           $('.tahoma-gateway-row').show();
-
-          $('#node-config-input-userId')
-            .closest('.form-row')
-            .show();
-
-          $('#node-config-input-userPassword')
-            .closest('.form-row')
-            .show();
-
         } else {
           $('.tahoma-legacy-region').show();
           $('.tahoma-oauth-info').hide();
           $('.tahoma-gateway-row').hide();
-
-          $('#node-config-input-userId')
-            .closest('.form-row')
-            .show();
-
-          $('#node-config-input-userPassword')
-            .closest('.form-row')
-            .show();
         }
 
         $('#node-config-cloud-result').hide();
@@ -103,7 +86,7 @@
       }
 
       /**
-       * Show a connection error.
+       * Display an error.
        */
       function showError(message) {
         $('#node-config-cloud-result').hide();
@@ -114,7 +97,7 @@
       }
 
       /**
-       * Show a successful connection.
+       * Display success.
        */
       function showSuccess(message) {
         $('#node-config-cloud-error').hide();
@@ -128,7 +111,9 @@
        * Populate the installation selector.
        */
       function populateGateways(gateways) {
-        discoveredGateways = gateways || [];
+        discoveredGateways = Array.isArray(gateways)
+          ? gateways
+          : [];
 
         $gateway.empty();
 
@@ -152,7 +137,11 @@
           $gateway.append(
             $('<option>', {
               value: gateway.gatewayId,
-              text: label + country + ' - ' + gateway.gatewayId,
+              text:
+                label +
+                country +
+                ' - ' +
+                gateway.gatewayId,
             }),
           );
         });
@@ -161,13 +150,16 @@
           $gateway.val(configNode.gatewayId);
         }
 
-        if (!$gateway.val() && discoveredGateways.length === 1) {
+        if (
+          !$gateway.val() &&
+          discoveredGateways.length === 1
+        ) {
           $gateway.val(discoveredGateways[0].gatewayId);
         }
       }
 
       /**
-       * Retrieve the selected installation.
+       * Get the selected installation.
        */
       function getSelectedGateway() {
         const gatewayId = $gateway.val();
@@ -178,16 +170,27 @@
       }
 
       /**
-       * Test the cloud connection.
+       * Test the Somfy Cloud connection.
+       *
+       * OAuth:
+       * 1. Discover installations.
+       * 2. Select an installation.
+       * 3. Validate the selected installation.
+       *
+       * Legacy:
+       * 1. Authenticate using the regional API.
+       * 2. Retrieve scenarios.
        */
-      $('#node-config-input-cloud-test')
+      $testButton
         .off('click')
         .on('click', function () {
           const button = $(this);
 
           const authMethod = $authMethod.val();
 
-          const userId = $('#node-config-input-userId').val();
+          const userId = $(
+            '#node-config-input-userId',
+          ).val();
 
           const enteredPassword = $(
             '#node-config-input-userPassword',
@@ -221,12 +224,26 @@
               ? $gateway.val()
               : '';
 
+          if (
+            authMethod === 'oauth' &&
+            gatewayId &&
+            discoveredGateways.length > 0 &&
+            !getSelectedGateway()
+          ) {
+            showError(
+              'Please select a valid discovered installation.',
+            );
+            return;
+          }
+
           button
             .prop('disabled', true)
             .text('Connecting...');
 
           $('#node-config-cloud-result').hide();
           $('#node-config-cloud-error').hide();
+
+          lastSuccessfulTest = false;
 
           const requestData = {
             configNodeId: configNode.id,
@@ -246,19 +263,22 @@
               'somfy/cloud/test',
 
             method: 'POST',
-
             data: requestData,
 
             success: function (response) {
-              if (!response.success) {
+              if (!response || !response.success) {
                 showError(
-                  response.error || 'Connection failed.',
+                  (response && response.error) ||
+                    'Connection failed.',
                 );
                 return;
               }
 
               if (authMethod === 'oauth') {
-                if (response.gateways) {
+                /*
+                 * Installation discovery response.
+                 */
+                if (Array.isArray(response.gateways)) {
                   populateGateways(response.gateways);
 
                   if (response.gateways.length === 0) {
@@ -268,6 +288,10 @@
                     return;
                   }
 
+                  /*
+                   * No installation was submitted.
+                   * Ask the user to select one.
+                   */
                   if (!gatewayId) {
                     if (response.gateways.length === 1) {
                       const onlyGateway =
@@ -277,16 +301,16 @@
 
                       showSuccess(
                         'Installation discovered: ' +
-                        (onlyGateway.label ||
-                          onlyGateway.gatewayId) +
-                        '. Click Test Cloud Connection again ' +
-                        'to validate it.',
+                          (onlyGateway.label ||
+                            onlyGateway.gatewayId) +
+                          '. Click Test Cloud Connection again ' +
+                          'to validate it.',
                       );
                     } else {
                       showSuccess(
                         response.gateways.length +
-                        ' installations found. Please select ' +
-                        'one and test the connection again.',
+                          ' installations found. Please select ' +
+                          'one and test the connection again.',
                       );
                     }
 
@@ -294,25 +318,37 @@
                   }
                 }
 
+                /*
+                 * Installation validation response.
+                 */
                 if (response.selectedGateway) {
                   $gateway.val(response.selectedGateway);
                 }
 
-                lastSuccessfulTest = true;
+                if (
+                  response.selectedGateway &&
+                  response.scenarioCount !== undefined
+                ) {
+                  lastSuccessfulTest = true;
 
-                showSuccess(
-                  'OAuth connection successful! Found ' +
-                  response.scenarioCount +
-                  ' scenario(s).',
-                );
-
+                  showSuccess(
+                    'OAuth connection successful! Found ' +
+                      response.scenarioCount +
+                      ' scenario(s).',
+                  );
+                } else {
+                  showError(
+                    response.message ||
+                      'Installation validation was not completed.',
+                  );
+                }
               } else {
                 lastSuccessfulTest = true;
 
                 showSuccess(
                   'Legacy connection successful! Found ' +
-                  response.scenarioCount +
-                  ' scenario(s).',
+                    response.scenarioCount +
+                    ' scenario(s).',
                 );
               }
             },
@@ -325,22 +361,19 @@
                 xhr.responseJSON.details
               ) {
                 message = xhr.responseJSON.details;
-
               } else if (
                 xhr.responseJSON &&
                 xhr.responseJSON.error
               ) {
                 message = xhr.responseJSON.error;
-
               } else if (xhr.statusText) {
-                message = xhr.status + ' - ' + xhr.statusText;
+                message =
+                  xhr.status + ' - ' + xhr.statusText;
               }
 
               lastSuccessfulTest = false;
 
-              showError(
-                'Connection failed: ' + message,
-              );
+              showError('Connection failed: ' + message);
             },
 
             complete: function () {
@@ -352,7 +385,7 @@
         });
 
       /**
-       * Reset the connection-test state when the installation changes.
+       * Reset the test state when the installation changes.
        */
       $gateway.on('change', function () {
         lastSuccessfulTest = false;
@@ -362,7 +395,7 @@
       });
 
       /**
-       * Reset the connection-test state when authentication changes.
+       * Reset the test state when authentication changes.
        */
       $authMethod.on('change', function () {
         updateAuthenticationFields();
@@ -370,14 +403,17 @@
 
       updateAuthenticationFields();
 
-      /**
-       * Restore the previously saved gateway in the selector.
+      /*
+       * Restore the previously saved gateway.
        */
       if (configNode.gatewayId) {
         $gateway.val(configNode.gatewayId);
       }
     },
 
+    /**
+     * Save configuration values.
+     */
     oneditsave: function () {
       const authMethod =
         $('#node-config-input-authMethod').val();
@@ -471,14 +507,14 @@
       <strong>New Somfy authentication</strong>
 
       <p>
-        The new authentication method uses Somfy OAuth tokens
-        and automatically discovers the installations linked
-        to your Somfy account.
+        The new authentication method uses Somfy OAuth
+        tokens and automatically discovers the installations
+        linked to your Somfy account.
       </p>
 
       <p>
         Select an installation after discovery. Its regional
-        API endpoint will be determined automatically.
+        API endpoint is determined automatically.
       </p>
 
       <p>
@@ -546,19 +582,9 @@
   </div>
 
   <!--
-    OAuth credentials are managed by the Node-RED runtime.
-    These fields are intentionally not displayed.
+    OAuth credentials are managed by Node-RED.
+    Tokens are intentionally not displayed.
   -->
-
-  <input
-    type="hidden"
-    id="node-config-input-refreshToken"
-  >
-
-  <input
-    type="hidden"
-    id="node-config-input-siteOid"
-  >
 </script>
 
 <script

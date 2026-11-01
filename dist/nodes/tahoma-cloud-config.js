@@ -45,6 +45,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 var somfy_cloud_api_1 = require("../core/somfy-cloud-api");
+var somfy_cloud_new_auth_1 = require("../core/somfy-cloud-new-auth");
 var http_response_enum_1 = require("../enums/http-response.enum");
 var REGIONAL_SERVERS = {
     europe: 'https://ha101-1.overkiz.com/enduser-mobile-web/enduserAPI',
@@ -53,24 +54,26 @@ var REGIONAL_SERVERS = {
 };
 /**
  * Extract useful diagnostic information from an unknown error.
- * Never include credentials or session information in logs.
+ *
+ * Never deliberately include credentials, access tokens or
+ * refresh tokens in logs.
  */
 var getErrorDetails = function (error) {
-    var _a;
+    var _a, _b, _c;
     var err = error;
     return {
         message: (err === null || err === void 0 ? void 0 : err.message) || 'Unknown error',
-        code: err === null || err === void 0 ? void 0 : err.code,
-        status: (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.status,
+        code: (err === null || err === void 0 ? void 0 : err.code) || ((_b = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.error),
+        status: (err === null || err === void 0 ? void 0 : err.status) || ((_c = err === null || err === void 0 ? void 0 : err.response) === null || _c === void 0 ? void 0 : _c.status),
     };
 };
 /**
  * Return an appropriate HTTP status for an API error.
  */
 var getHttpStatus = function (error, fallback) {
-    var details = getErrorDetails(error);
-    if (details.status && details.status >= 400 && details.status <= 599) {
-        return details.status;
+    var status = getErrorDetails(error).status;
+    if (status && status >= 400 && status <= 599) {
+        return status;
     }
     return fallback;
 };
@@ -93,72 +96,137 @@ var safeLogout = function (api) {
         console.warn("[TaHoma Cloud] Logout failed: ".concat(details.message));
     }
 };
+/**
+ * Persist the complete OAuth session in Node-RED credentials.
+ *
+ * Node-RED encrypts credentials at rest.
+ *
+ * The complete session must be saved together because the
+ * refresh token is associated with the selected installation.
+ */
+var persistOAuthCredentials = function (RED, nodeId, existingCredentials, session) {
+    var nodes = RED.nodes;
+    if (typeof nodes.addCredentials !== 'function') {
+        throw new Error('Node-RED credential persistence is unavailable');
+    }
+    nodes.addCredentials(nodeId, {
+        userId: existingCredentials.userId || '',
+        userPassword: existingCredentials.userPassword || '',
+        refreshToken: session.refreshToken,
+        siteOid: session.siteOid,
+        gatewayId: session.gatewayId,
+        oauthRegion: session.region,
+    });
+    existingCredentials.refreshToken = session.refreshToken;
+    existingCredentials.siteOid = session.siteOid;
+    existingCredentials.gatewayId = session.gatewayId;
+    existingCredentials.oauthRegion = session.region;
+};
+/**
+ * Convert an OAuth gateway candidate into the public editor format.
+ */
+var serializeGateway = function (gateway) { return ({
+    gatewayId: gateway.gatewayId,
+    homeId: gateway.homeId,
+    label: gateway.label,
+    country: gateway.country,
+    region: gateway.region,
+}); };
 module.exports = function (RED) {
     RED.nodes.registerType('tahoma-cloud-config', function (props) {
         var _this = this;
         RED.nodes.createNode(this, props);
         this['name'] = props.name;
         this['region'] = props.region;
-        var credentials = this.credentials;
-        var userId = typeof (credentials === null || credentials === void 0 ? void 0 : credentials.userId) === 'string'
-            ? credentials.userId
-            : undefined;
-        var userPassword = typeof (credentials === null || credentials === void 0 ? void 0 : credentials.userPassword) === 'string'
+        this['authMethod'] = props.authMethod || 'legacy';
+        this['gatewayId'] = props.gatewayId || '';
+        var credentials = (this.credentials || {});
+        var authMethod = props.authMethod || 'legacy';
+        var userId = typeof credentials.userId === 'string' ? credentials.userId : undefined;
+        var userPassword = typeof credentials.userPassword === 'string'
             ? credentials.userPassword
             : undefined;
         var serverUrl = REGIONAL_SERVERS[props.region];
+        var savedGatewayId = props.gatewayId || credentials.gatewayId || undefined;
         /*
-         * One API instance per configuration node.
+         * Shared API instance.
          *
-         * All cloud nodes using this configuration share the
-         * same SomfyCloudApi instance and authenticated session.
+         * OAuth and legacy authentication use the same public
+         * SomfyCloudApi interface.
          */
-        var api = serverUrl && userId && userPassword
-            ? new somfy_cloud_api_1.SomfyCloudApi(userId, userPassword, serverUrl)
-            : null;
+        var api = null;
+        var oauthAuth = null;
         /*
-         * Shared scenario cache.
-         *
-         * null means that initial discovery has not succeeded yet.
-         * An empty array is a valid, successfully retrieved result.
+         * Configuration lifecycle.
          */
-        var scenarios = null;
+        var closing = false;
         /*
-         * Authentication state.
+         * Authentication concurrency.
          */
         var authenticated = false;
         var loginPromise = null;
         /*
-         * Scenario retrieval concurrency control.
+         * Scenario cache.
          */
+        var scenarios = null;
         var scenariosPromise = null;
         /*
-         * Configuration-node lifecycle.
+         * Authentication initialization.
          */
-        var closing = false;
+        if (authMethod === 'oauth') {
+            if (userId && userPassword) {
+                oauthAuth = new somfy_cloud_new_auth_1.SomfyCloudNewAuth({
+                    username: userId,
+                    password: userPassword,
+                    refreshToken: credentials.refreshToken,
+                    siteOid: credentials.siteOid,
+                    gatewayId: savedGatewayId,
+                    region: credentials.oauthRegion,
+                });
+                api = new somfy_cloud_api_1.SomfyCloudApi(oauthAuth);
+                /*
+                 * Persist every rotated refresh token.
+                 *
+                 * The OAuth implementation invokes this callback
+                 * after receiving a replacement refresh token.
+                 */
+                oauthAuth.setTokenRefreshCallback(function (session) { return __awaiter(_this, void 0, void 0, function () {
+                    return __generator(this, function (_a) {
+                        if (closing) {
+                            return [2 /*return*/];
+                        }
+                        persistOAuthCredentials(RED, this.id, credentials, session);
+                        RED.log.info('[TaHoma Cloud] OAuth session credentials updated');
+                        return [2 /*return*/];
+                    });
+                }); });
+            }
+        }
+        else if (serverUrl && userId && userPassword) {
+            api = new somfy_cloud_api_1.SomfyCloudApi(userId, userPassword, serverUrl);
+        }
         /**
          * Authenticate only when necessary.
          *
          * Concurrent callers share the same login operation.
-         * The API instance is never recreated.
          */
         var ensureAuthenticated = function () { return __awaiter(_this, void 0, void 0, function () {
             var _this = this;
             return __generator(this, function (_a) {
                 if (!api) {
-                    throw new Error('Cloud credentials or regional server are missing');
+                    throw new Error('Cloud credentials, authentication method or regional server are missing');
                 }
                 if (closing) {
                     throw new Error('TaHoma Cloud configuration is closing');
                 }
-                if (authenticated) {
+                if (authenticated && api.hasSession()) {
                     return [2 /*return*/];
                 }
                 if (loginPromise) {
                     return [2 /*return*/, loginPromise];
                 }
                 loginPromise = (function () { return __awaiter(_this, void 0, void 0, function () {
-                    var error_1;
+                    var gateways, session, error_1;
                     return __generator(this, function (_a) {
                         switch (_a.label) {
                             case 0:
@@ -166,8 +234,35 @@ module.exports = function (RED) {
                                 return [4 /*yield*/, api.login()];
                             case 1:
                                 _a.sent();
+                                if (closing) {
+                                    throw new Error('TaHoma Cloud configuration is closing');
+                                }
+                                /*
+                                 * OAuth login discovers installations.
+                                 *
+                                 * A previously saved gateway is restored by
+                                 * SomfyCloudNewAuth.login().
+                                 */
+                                if (authMethod === 'oauth' && oauthAuth) {
+                                    if (savedGatewayId &&
+                                        oauthAuth.selectedGateway !== savedGatewayId) {
+                                        oauthAuth.selectGateway(savedGatewayId);
+                                    }
+                                    if (!oauthAuth.selectedGateway) {
+                                        gateways = oauthAuth.availableGateways;
+                                        if (gateways.length === 1) {
+                                            oauthAuth.selectGateway(gateways[0].gatewayId);
+                                        }
+                                        else {
+                                            throw new Error('No Somfy installation is selected. ' +
+                                                'Select an installation in the TaHoma Cloud configuration.');
+                                        }
+                                    }
+                                    session = oauthAuth.toCredentials();
+                                    persistOAuthCredentials(RED, this.id, credentials, session);
+                                }
                                 authenticated = true;
-                                RED.log.info('[TaHoma Cloud] Authentication successful');
+                                RED.log.info("[TaHoma Cloud] ".concat(authMethod.toUpperCase(), " authentication successful"));
                                 return [3 /*break*/, 4];
                             case 2:
                                 error_1 = _a.sent();
@@ -186,11 +281,8 @@ module.exports = function (RED) {
         /**
          * Retrieve scenarios from Somfy Cloud.
          *
-         * If the session has expired, authenticate again and retry
-         * the read operation once.
-         *
-         * Scenario retrieval is safe to retry because it does not
-         * execute any action on the installation.
+         * A failed authentication request can be retried once
+         * because retrieving scenarios does not execute actions.
          */
         var fetchScenarios = function () { return __awaiter(_this, void 0, void 0, function () {
             var actionGroups, error_2;
@@ -218,15 +310,13 @@ module.exports = function (RED) {
                         if (!isAuthenticationError(error_2)) {
                             throw error_2;
                         }
-                        RED.log.warn('[TaHoma Cloud] Session expired while retrieving scenarios. Re-authenticating.');
+                        RED.log.warn('[TaHoma Cloud] Authentication error while retrieving scenarios. Re-authenticating.');
                         authenticated = false;
                         return [4 /*yield*/, ensureAuthenticated()];
                     case 5:
                         _a.sent();
                         return [4 /*yield*/, api.getActionGroups()];
-                    case 6: 
-                    // Retry scenario retrieval once after authentication.
-                    return [2 /*return*/, (_a.sent()).map(function (group) { return ({
+                    case 6: return [2 /*return*/, (_a.sent()).map(function (group) { return ({
                             id: group.oid,
                             name: group.label,
                         }); })];
@@ -237,11 +327,7 @@ module.exports = function (RED) {
         /**
          * Get or refresh scenarios.
          *
-         * Normal calls use the cache.
-         * Forced refreshes retrieve the latest scenarios.
-         *
-         * Concurrent retrieval requests share the same Promise.
-         * The existing cache is only replaced after successful retrieval.
+         * The cache is replaced only after successful retrieval.
          */
         var retrieveScenarios = function () {
             var args_1 = [];
@@ -277,7 +363,6 @@ module.exports = function (RED) {
                                             if (closing) {
                                                 throw new Error('TaHoma Cloud configuration is closing');
                                             }
-                                            // Replace the cache only after a successful retrieval.
                                             scenarios = updatedScenarios;
                                             RED.log.info("[TaHoma Cloud] Scenario cache updated: ".concat(scenarios.length, " scenarios"));
                                             return [2 /*return*/, scenarios];
@@ -306,14 +391,9 @@ module.exports = function (RED) {
             });
         };
         /**
-         * Execute a scenario using the shared API instance.
+         * Execute a scenario.
          *
-         * IMPORTANT:
-         * Execution is deliberately NOT retried after an authentication
-         * error. This avoids the risk of executing a scenario twice
-         * if the server processed the request but its response failed.
-         *
-         * The next operation will authenticate again when necessary.
+         * Never automatically retry scenario execution.
          */
         var executeScenario = function (scenarioId) { return __awaiter(_this, void 0, void 0, function () {
             var execution, error_4;
@@ -323,7 +403,9 @@ module.exports = function (RED) {
                         if (!api) {
                             throw new Error('Cloud credentials or regional server are missing');
                         }
-                        if (!scenarioId || typeof scenarioId !== 'string') {
+                        if (!scenarioId ||
+                            typeof scenarioId !== 'string' ||
+                            !scenarioId.trim()) {
                             throw new Error('A valid scenario ID is required');
                         }
                         if (closing) {
@@ -344,10 +426,9 @@ module.exports = function (RED) {
                     case 4:
                         error_4 = _a.sent();
                         if (isAuthenticationError(error_4)) {
-                            // Mark the session as invalid for the next operation.
-                            // Do not automatically retry scenario execution.
                             authenticated = false;
-                            RED.log.warn('[TaHoma Cloud] Session expired during scenario execution. ' +
+                            api.invalidateSession();
+                            RED.log.warn('[TaHoma Cloud] Authentication error during scenario execution. ' +
                                 'The execution was not automatically retried.');
                         }
                         throw error_4;
@@ -357,29 +438,14 @@ module.exports = function (RED) {
         }); };
         /*
          * Public configuration-node API.
-         *
-         * All three cloud nodes use these methods instead of
-         * creating independent SomfyCloudApi instances.
-         */
-        /**
-         * Return cached scenarios, discovering them if necessary.
          */
         this['getScenarios'] = function () {
             return retrieveScenarios(false);
         };
-        /**
-         * Force scenario discovery using the existing session.
-         */
         this['refreshScenarios'] = function () {
             return retrieveScenarios(true);
         };
-        /**
-         * Execute a scenario through the shared authenticated session.
-         */
         this['executeScenario'] = function (scenarioId) { return executeScenario(scenarioId); };
-        /**
-         * Find a scenario by ID.
-         */
         this['getScenarioById'] = function (id) { return __awaiter(_this, void 0, void 0, function () {
             var availableScenarios;
             return __generator(this, function (_a) {
@@ -391,23 +457,21 @@ module.exports = function (RED) {
                 }
             });
         }); };
-        /**
-         * Check whether the scenario cache has been initialized.
-         */
         this['isScenarioCacheReady'] = function () { return scenarios !== null; };
-        /**
-         * Backward compatibility with existing nodes.
+        /*
+         * Backward compatibility.
          *
-         * Returns the shared API instance, not a new instance.
-         *
-         * Callers must NOT independently call login() or logout().
+         * Returns the shared API instance.
+         * Callers must not independently log in or log out.
          */
         this['createApi'] = api ? function () { return api; } : null;
         /*
+         * Expose the selected authentication method for
+         * other nodes that need to inspect configuration.
+         */
+        this['getAuthMethod'] = function () { return authMethod; };
+        /*
          * Initial scenario discovery.
-         *
-         * Runs once per configuration-node instance.
-         * Other cloud nodes reuse the resulting cache.
          */
         if (api) {
             retrieveScenarios().catch(function () {
@@ -416,12 +480,10 @@ module.exports = function (RED) {
             });
         }
         else {
-            RED.log.warn('[TaHoma Cloud] Scenario discovery skipped: credentials or region missing.');
+            RED.log.warn("[TaHoma Cloud] Initialization skipped: ".concat(authMethod, " credentials or configuration are missing."));
         }
         /*
-         * Configuration-node shutdown.
-         *
-         * Clear the local session when the configuration node closes.
+         * Shutdown.
          */
         this.on('close', function (removed, done) {
             closing = true;
@@ -437,87 +499,172 @@ module.exports = function (RED) {
         credentials: {
             userId: { type: 'text' },
             userPassword: { type: 'password' },
+            refreshToken: { type: 'password' },
+            siteOid: { type: 'text' },
+            gatewayId: { type: 'text' },
+            oauthRegion: { type: 'text' },
         },
     });
     /**
      * Test Somfy Cloud connection.
      *
-     * Uses an independent API instance so that testing credentials
-     * does not affect the active configuration node's session/cache.
+     * Supports both legacy and OAuth authentication.
+     *
+     * OAuth testing:
+     * - First request discovers installations.
+     * - Second request validates the selected installation.
      */
     RED.httpAdmin.post('/somfy/cloud/test', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
-        var _a, configNodeId, submittedUserId, submittedPassword, region, serverUrl, configNode, storedCredentials, userId, userPassword, testApi, authenticated, actionGroups, error_5, details, status_1;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
+        var body, configNodeId, submittedUserId, submittedPassword, region, gatewayId, authMethod, configNode, storedCredentials, userId, userPassword, testApi, testAuth, authenticated, gateways, actionGroups_1, session, serverUrl, actionGroups, error_5, details, status_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
                 case 0:
-                    _a = request.body || {}, configNodeId = _a.configNodeId, submittedUserId = _a.userId, submittedPassword = _a.userPassword, region = _a.region;
-                    serverUrl = REGIONAL_SERVERS[region];
+                    body = (request.body || {});
+                    configNodeId = body.configNodeId, submittedUserId = body.userId, submittedPassword = body.userPassword, region = body.region, gatewayId = body.gatewayId;
+                    authMethod = body.authMethod || 'legacy';
                     configNode = configNodeId
                         ? RED.nodes.getNode(configNodeId)
                         : null;
                     storedCredentials = configNode === null || configNode === void 0 ? void 0 : configNode.credentials;
                     userId = submittedUserId || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userId);
                     userPassword = submittedPassword || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userPassword);
-                    if (!userId || !userPassword || !serverUrl) {
+                    if (!userId || !userPassword) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
                         response.json({
                             success: false,
-                            error: 'Missing credentials or invalid region',
+                            error: 'Missing Somfy email or password',
+                        });
+                        return [2 /*return*/];
+                    }
+                    testApi = null;
+                    testAuth = null;
+                    authenticated = false;
+                    _a.label = 1;
+                case 1:
+                    _a.trys.push([1, 7, 8, 9]);
+                    if (!(authMethod === 'oauth')) return [3 /*break*/, 4];
+                    testAuth = new somfy_cloud_new_auth_1.SomfyCloudNewAuth({
+                        username: userId,
+                        password: userPassword,
+                        refreshToken: storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.refreshToken,
+                        siteOid: storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.siteOid,
+                        gatewayId: gatewayId || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.gatewayId),
+                        region: storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.oauthRegion,
+                    });
+                    testApi = new somfy_cloud_api_1.SomfyCloudApi(testAuth);
+                    return [4 /*yield*/, testApi.login()];
+                case 2:
+                    _a.sent();
+                    authenticated = true;
+                    gateways = testAuth.availableGateways.map(serializeGateway);
+                    /*
+                     * Return discovered installations when no gateway
+                     * has yet been selected.
+                     */
+                    if (!gatewayId && !testAuth.selectedGateway) {
+                        response.json({
+                            success: true,
+                            authenticated: true,
+                            gateways: gateways,
+                            scenarioCount: 0,
+                            message: 'Installations discovered',
+                        });
+                        return [2 /*return*/];
+                    }
+                    if (gatewayId) {
+                        testAuth.selectGateway(gatewayId);
+                    }
+                    if (!testAuth.selectedGateway) {
+                        response.json({
+                            success: true,
+                            authenticated: true,
+                            gateways: gateways,
+                            scenarioCount: 0,
+                            message: 'Please select a Somfy installation',
+                        });
+                        return [2 /*return*/];
+                    }
+                    return [4 /*yield*/, testApi.getActionGroups()];
+                case 3:
+                    actionGroups_1 = _a.sent();
+                    session = testAuth.toCredentials();
+                    response.json({
+                        success: true,
+                        authenticated: true,
+                        gateways: gateways,
+                        selectedGateway: session.gatewayId,
+                        siteOid: session.siteOid,
+                        region: session.region,
+                        scenarioCount: actionGroups_1.length,
+                    });
+                    RED.log.info("[TaHoma Cloud Test] OAuth connection successful. " +
+                        "".concat(actionGroups_1.length, " scenarios discovered."));
+                    return [2 /*return*/];
+                case 4:
+                    serverUrl = REGIONAL_SERVERS[region || 'europe'];
+                    if (!serverUrl) {
+                        response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
+                        response.json({
+                            success: false,
+                            error: 'Invalid regional server',
                         });
                         return [2 /*return*/];
                     }
                     testApi = new somfy_cloud_api_1.SomfyCloudApi(userId, userPassword, serverUrl);
-                    authenticated = false;
-                    _b.label = 1;
-                case 1:
-                    _b.trys.push([1, 4, 5, 6]);
                     return [4 /*yield*/, testApi.login()];
-                case 2:
-                    _b.sent();
+                case 5:
+                    _a.sent();
                     authenticated = true;
-                    RED.log.info("[TaHoma Cloud Test] Authentication successful (region: ".concat(region, ")"));
                     return [4 /*yield*/, testApi.getActionGroups()];
-                case 3:
-                    actionGroups = _b.sent();
-                    RED.log.info("[TaHoma Cloud Test] Successfully retrieved ".concat(actionGroups.length, " scenarios"));
+                case 6:
+                    actionGroups = _a.sent();
                     response.json({
                         success: true,
                         authenticated: true,
                         scenarioCount: actionGroups.length,
                     });
-                    return [3 /*break*/, 6];
-                case 4:
-                    error_5 = _b.sent();
+                    RED.log.info("[TaHoma Cloud Test] Legacy connection successful. " +
+                        "".concat(actionGroups.length, " scenarios discovered."));
+                    return [3 /*break*/, 9];
+                case 7:
+                    error_5 = _a.sent();
                     details = getErrorDetails(error_5);
-                    RED.log.error("[TaHoma Cloud Test] ".concat(authenticated ? 'Scenario discovery' : 'Authentication', " failed. ") +
+                    RED.log.error("[TaHoma Cloud Test] ".concat(authMethod, " connection failed. ") +
                         "Message: ".concat(details.message, ", ") +
                         "HTTP status: ".concat(details.status || 'N/A', ", ") +
                         "Code: ".concat(details.code || 'N/A'));
                     status_1 = getHttpStatus(error_5, authenticated ? http_response_enum_1.HttpResponse.SERVER_ERROR : http_response_enum_1.HttpResponse.UNAUTHORIZED);
-                    response.status(status_1);
-                    response.json({
-                        success: false,
-                        authenticated: authenticated,
-                        error: authenticated
-                            ? 'Authentication successful, but scenario discovery failed'
-                            : 'Somfy Cloud authentication failed',
-                        details: details.message,
-                        code: details.code,
-                        httpStatus: details.status,
-                    });
-                    return [3 /*break*/, 6];
-                case 5:
-                    safeLogout(testApi);
+                    if (!response.headersSent) {
+                        response.status(status_1);
+                        response.json({
+                            success: false,
+                            authenticated: authenticated,
+                            error: authenticated
+                                ? 'Authentication successful, but scenario discovery failed'
+                                : 'Somfy Cloud authentication failed',
+                            details: details.message,
+                            code: details.code,
+                            httpStatus: details.status,
+                        });
+                    }
+                    return [3 /*break*/, 9];
+                case 8:
+                    if (testApi) {
+                        safeLogout(testApi);
+                    }
+                    else if (testAuth) {
+                        testAuth.logout();
+                    }
                     return [7 /*endfinally*/];
-                case 6: return [2 /*return*/];
+                case 9: return [2 /*return*/];
             }
         });
     }); });
     /**
      * Retrieve scenarios for an existing configuration node.
      *
-     * Normal requests read the shared cache.
-     * Requests with ?refresh=true force a new cloud retrieval.
+     * Normal requests use the shared cache.
+     * ?refresh=true forces a cloud retrieval.
      */
     RED.httpAdmin.get('/somfy/cloud/:account/scenarios', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
         var configNode, getScenarios, refreshScenarios, forceRefresh, availableScenarios, _a, error_6, details;

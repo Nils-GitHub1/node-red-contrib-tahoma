@@ -1,4 +1,3 @@
-
 import axios, { AxiosError, AxiosInstance } from 'axios';
 
 /* -------------------------------------------------------------------------- */
@@ -551,10 +550,7 @@ export class SomfyCloudNewAuth {
         },
       );
     } catch (error) {
-      throw this.mapHttpError(
-        error,
-        'Somfy Ginaite token exchange failed',
-      );
+      throw this.mapHttpError(error, 'Somfy Ginaite token exchange failed');
     }
 
     this.updateToken(response.data);
@@ -596,9 +592,7 @@ export class SomfyCloudNewAuth {
       );
 
       const page = data as ISomfyBobResponse;
-      const results = Array.isArray(page.results)
-        ? page.results
-        : [];
+      const results = Array.isArray(page.results) ? page.results : [];
 
       totalCount = Number(page.totalCount || 0);
       sitesSeen += results.length;
@@ -634,10 +628,7 @@ export class SomfyCloudNewAuth {
             region,
             roles: roles
               .map((role) => role.roleOID)
-              .filter(
-                (role): role is string =>
-                  typeof role === 'string',
-              ),
+              .filter((role): role is string => typeof role === 'string'),
           });
         }
       }
@@ -666,13 +657,9 @@ export class SomfyCloudNewAuth {
   /**
    * Make an authenticated BOB API request.
    */
-  private async bobGet(
-    path: string,
-  ): Promise<Record<string, unknown>> {
+  private async bobGet(path: string): Promise<Record<string, unknown>> {
     if (!this.accessToken) {
-      throw new SomfyAuthError(
-        'No Ginaite access token available for BOB',
-      );
+      throw new SomfyAuthError('No Ginaite access token available for BOB');
     }
 
     try {
@@ -688,10 +675,7 @@ export class SomfyCloudNewAuth {
 
       return response.data as Record<string, unknown>;
     } catch (error) {
-      throw this.mapHttpError(
-        error,
-        'Somfy BOB site discovery failed',
-      );
+      throw this.mapHttpError(error, 'Somfy BOB site discovery failed');
     }
   }
 
@@ -701,11 +685,7 @@ export class SomfyCloudNewAuth {
    * BOB discovery requires an account-wide token.
    */
   private async ensureAccountToken(): Promise<void> {
-    if (
-      this.accessToken &&
-      !this.isExpired() &&
-      this.tokenSiteOid === null
-    ) {
+    if (this.accessToken && !this.isExpired() && this.tokenSiteOid === null) {
       return;
     }
 
@@ -750,9 +730,7 @@ export class SomfyCloudNewAuth {
     );
 
     if (!gateway) {
-      throw new SomfyAuthError(
-        `Unknown Somfy gateway ID: ${gatewayId}`,
-      );
+      throw new SomfyAuthError(`Unknown Somfy gateway ID: ${gatewayId}`);
     }
 
     const endpoint = REGION_ENDPOINTS[gateway.region];
@@ -853,14 +831,10 @@ export class SomfyCloudNewAuth {
    * A request for a different token scope must wait for
    * the current refresh operation before starting another.
    */
-  private async refreshTokenWithLock(
-    siteOid: string | null,
-  ): Promise<void> {
+  private async refreshTokenWithLock(siteOid: string | null): Promise<void> {
     while (true) {
       if (this.closed) {
-        throw new SomfyAuthError(
-          'Somfy authentication instance is closed',
-        );
+        throw new SomfyAuthError('Somfy authentication instance is closed');
       }
 
       /*
@@ -873,10 +847,7 @@ export class SomfyCloudNewAuth {
          * The other operation may already have produced
          * the correct token.
          */
-        if (
-          !this.isExpired() &&
-          this.tokenSiteOid === siteOid
-        ) {
+        if (!this.isExpired() && this.tokenSiteOid === siteOid) {
           return;
         }
 
@@ -889,10 +860,7 @@ export class SomfyCloudNewAuth {
       /*
        * Recheck after obtaining the refresh opportunity.
        */
-      if (
-        !this.isExpired() &&
-        this.tokenSiteOid === siteOid
-      ) {
+      if (!this.isExpired() && this.tokenSiteOid === siteOid) {
         return;
       }
 
@@ -923,13 +891,9 @@ export class SomfyCloudNewAuth {
    *
    * Otherwise, an account-wide token is requested.
    */
-  private async performRefresh(
-    siteOid: string | null,
-  ): Promise<void> {
+  private async performRefresh(siteOid: string | null): Promise<void> {
     if (!this.refreshToken) {
-      throw new SomfyAuthError(
-        'No Somfy refresh token available',
-      );
+      throw new SomfyAuthError('No Somfy refresh token available');
     }
 
     const previousRefreshToken = this.refreshToken;
@@ -964,19 +928,14 @@ export class SomfyCloudNewAuth {
         error_description?: string;
       }>;
 
-      if (
-        axiosError.response?.data?.error === 'invalid_grant'
-      ) {
+      if (axiosError.response?.data?.error === 'invalid_grant') {
         throw new SomfyBadCredentialsError(
           axiosError.response.data.error_description ||
             'Somfy refresh token has been revoked',
         );
       }
 
-      throw this.mapHttpError(
-        error,
-        'Somfy token refresh failed',
-      );
+      throw this.mapHttpError(error, 'Somfy token refresh failed');
     }
 
     const token = response.data;
@@ -988,9 +947,7 @@ export class SomfyCloudNewAuth {
      * make the session appear valid.
      */
     if (!token.access_token) {
-      throw new SomfyAuthError(
-        'Somfy token refresh returned no access token',
-      );
+      throw new SomfyAuthError('Somfy token refresh returned no access token');
     }
 
     /*
@@ -1008,8 +965,7 @@ export class SomfyCloudNewAuth {
       !Number.isFinite(token.expires_in) ||
       token.expires_in <= 0
     ) {
-      this.expiresAt =
-        Date.now() + FALLBACK_TOKEN_LIFETIME_MS;
+      this.expiresAt = Date.now() + FALLBACK_TOKEN_LIFETIME_MS;
     }
 
     this.tokenSiteOid = siteOid;
@@ -1058,8 +1014,7 @@ export class SomfyCloudNewAuth {
 
     const session = this.getSession();
 
-    const changed =
-      session.refreshToken !== this.persistedRefreshToken;
+    const changed = session.refreshToken !== this.persistedRefreshToken;
 
     if (!changed) {
       return;
@@ -1164,9 +1119,7 @@ export class SomfyCloudNewAuth {
     await this.ensureSiteToken();
 
     if (!this.accessToken) {
-      throw new SomfyAuthError(
-        'No Somfy access token available',
-      );
+      throw new SomfyAuthError('No Somfy access token available');
     }
 
     return {
@@ -1182,9 +1135,7 @@ export class SomfyCloudNewAuth {
    */
   private async ensureSiteToken(): Promise<void> {
     if (this.closed) {
-      throw new SomfyAuthError(
-        'Somfy authentication instance is closed',
-      );
+      throw new SomfyAuthError('Somfy authentication instance is closed');
     }
 
     if (!this.selectedSiteOid || !this.selectedGatewayId) {
@@ -1194,22 +1145,15 @@ export class SomfyCloudNewAuth {
     }
 
     if (!this.selectedRegion || !this.selectedEndpoint) {
-      throw new SomfyAuthError(
-        'No regional Somfy API endpoint is configured',
-      );
+      throw new SomfyAuthError('No regional Somfy API endpoint is configured');
     }
 
-    if (
-      !this.isExpired() &&
-      this.tokenSiteOid === this.selectedSiteOid
-    ) {
+    if (!this.isExpired() && this.tokenSiteOid === this.selectedSiteOid) {
       return;
     }
 
     if (!this.refreshToken) {
-      throw new SomfyAuthError(
-        'No Somfy refresh token available',
-      );
+      throw new SomfyAuthError('No Somfy refresh token available');
     }
 
     await this.refreshTokenWithLock(this.selectedSiteOid);
@@ -1276,24 +1220,22 @@ export class SomfyCloudNewAuth {
    * Return whether authentication has been initialized.
    */
   public isAuthenticated(): boolean {
-  return this.loggedIn && !this.closed;
-}
+    return this.loggedIn && !this.closed;
+  }
 
   /**
    * Authentication headers. This preserves the existing getHeaders() implementation while satisfying SomfyCloudApi.
    */
-public async getAuthHeaders(): Promise<Record<string, string>> {
-  return this.getHeaders();
-}
+  public async getAuthHeaders(): Promise<Record<string, string>> {
+    return this.getHeaders();
+  }
 
   /**
    * Return whether a gateway has been selected.
    */
   public get hasSelectedGateway(): boolean {
     return Boolean(
-      this.selectedGatewayId &&
-        this.selectedSiteOid &&
-        this.selectedEndpoint,
+      this.selectedGatewayId && this.selectedSiteOid && this.selectedEndpoint,
     );
   }
 
@@ -1359,17 +1301,13 @@ public async getAuthHeaders(): Promise<Record<string, string>> {
       typeof session.region !== 'string' ||
       !session.region
     ) {
-      throw new SomfyAuthError(
-        'Invalid Somfy OAuth session',
-      );
+      throw new SomfyAuthError('Invalid Somfy OAuth session');
     }
 
     const endpoint = REGION_ENDPOINTS[session.region];
 
     if (!endpoint) {
-      throw new SomfyAuthError(
-        `Unknown Somfy region: ${session.region}`,
-      );
+      throw new SomfyAuthError(`Unknown Somfy region: ${session.region}`);
     }
 
     this.refreshToken = session.refreshToken;

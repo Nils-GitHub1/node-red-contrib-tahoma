@@ -14,6 +14,17 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -531,7 +542,7 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                     case 3:
                         data = _c.sent();
                         page = data;
-                        results = page.results || [];
+                        results = Array.isArray(page.results) ? page.results : [];
                         totalCount = Number(page.totalCount || 0);
                         sitesSeen += results.length;
                         for (_i = 0, results_1 = results; _i < results_1.length; _i++) {
@@ -578,13 +589,13 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                                 'The maximum discovery limit was reached.');
                         }
                         this.gateways = candidates;
-                        return [2 /*return*/, this.gateways];
+                        return [2 /*return*/, this.availableGateways];
                 }
             });
         });
     };
     /* ---------------------------------------------------------------------- */
-    /* BOB API requests                                                        */
+    /* BOB API requests                                                       */
     /* ---------------------------------------------------------------------- */
     /**
      * Make an authenticated BOB API request.
@@ -661,6 +672,9 @@ var SomfyCloudNewAuth = /** @class */ (function () {
      * - Regional API endpoint
      */
     SomfyCloudNewAuth.prototype.selectGateway = function (gatewayId) {
+        if (!gatewayId || typeof gatewayId !== 'string') {
+            throw new SomfyNoGatewaySelectedError('A valid Somfy gateway ID is required');
+        }
         var gateway = this.gateways.find(function (candidate) { return candidate.gatewayId === gatewayId; });
         if (!gateway) {
             throw new SomfyAuthError("Unknown Somfy gateway ID: ".concat(gatewayId));
@@ -669,15 +683,20 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         if (!endpoint) {
             throw new SomfyAuthError("No API endpoint configured for region ".concat(gateway.region));
         }
+        var selectionChanged = this.selectedGatewayId !== gateway.gatewayId ||
+            this.selectedSiteOid !== gateway.homeId ||
+            this.selectedRegion !== gateway.region;
         this.selectedGatewayId = gateway.gatewayId;
         this.selectedSiteOid = gateway.homeId;
         this.selectedRegion = gateway.region;
         this.selectedEndpoint = endpoint;
         /*
          * Force generation of a site-scoped token
-         * on the next regional API request.
+         * when the installation changes.
          */
-        this.expiresAt = 0;
+        if (selectionChanged) {
+            this.expiresAt = 0;
+        }
     };
     /**
      * Resolve the regional API endpoint from a country code.
@@ -710,7 +729,7 @@ var SomfyCloudNewAuth = /** @class */ (function () {
     /**
      * Refresh the token if necessary.
      *
-     * Concurrent callers share one refresh Promise.
+     * Concurrent callers share the same refresh operation.
      */
     SomfyCloudNewAuth.prototype.refreshIfNeeded = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -735,40 +754,64 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         });
     };
     /**
-     * Serialize refresh requests.
+     * Serialize refresh operations.
      *
-     * This is important because Ginaite may rotate refresh tokens.
+     * Ginaite may rotate refresh tokens.
+     *
+     * A request for a different token scope must wait for
+     * the current refresh operation before starting another.
      */
     SomfyCloudNewAuth.prototype.refreshTokenWithLock = function (siteOid) {
         return __awaiter(this, void 0, void 0, function () {
+            var refreshOperation;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
+                        if (!true) return [3 /*break*/, 7];
+                        if (this.closed) {
+                            throw new SomfyAuthError('Somfy authentication instance is closed');
+                        }
                         if (!this.refreshPromise) return [3 /*break*/, 2];
                         return [4 /*yield*/, this.refreshPromise];
                     case 1:
                         _a.sent();
                         /*
-                         * Another request may already have generated
-                         * a token with the requested scope.
+                         * The other operation may already have produced
+                         * the correct token.
                          */
                         if (!this.isExpired() && this.tokenSiteOid === siteOid) {
                             return [2 /*return*/];
                         }
-                        _a.label = 2;
+                        /*
+                         * Otherwise continue and generate the required scope.
+                         */
+                        return [3 /*break*/, 0];
                     case 2:
-                        this.refreshPromise = this.performRefresh(siteOid);
+                        /*
+                         * Recheck after obtaining the refresh opportunity.
+                         */
+                        if (!this.isExpired() && this.tokenSiteOid === siteOid) {
+                            return [2 /*return*/];
+                        }
+                        refreshOperation = this.performRefresh(siteOid);
+                        this.refreshPromise = refreshOperation;
                         _a.label = 3;
                     case 3:
                         _a.trys.push([3, , 5, 6]);
-                        return [4 /*yield*/, this.refreshPromise];
+                        return [4 /*yield*/, refreshOperation];
                     case 4:
                         _a.sent();
                         return [3 /*break*/, 6];
                     case 5:
-                        this.refreshPromise = null;
+                        /*
+                         * Do not clear another operation's Promise.
+                         */
+                        if (this.refreshPromise === refreshOperation) {
+                            this.refreshPromise = null;
+                        }
                         return [7 /*endfinally*/];
                     case 6: return [2 /*return*/];
+                    case 7: return [2 /*return*/];
                 }
             });
         });
@@ -821,20 +864,39 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                         throw this.mapHttpError(error_5, 'Somfy token refresh failed');
                     case 4:
                         token = response.data;
+                        /*
+                         * Never accept an incomplete refresh response.
+                         *
+                         * Retaining an old access token here could incorrectly
+                         * make the session appear valid.
+                         */
+                        if (!token.access_token) {
+                            throw new SomfyAuthError('Somfy token refresh returned no access token');
+                        }
+                        /*
+                         * Preserve the old refresh token when the server
+                         * does not issue a replacement.
+                         */
+                        if (!token.refresh_token) {
+                            token.refresh_token = previousRefreshToken;
+                        }
                         this.updateToken(token);
-                        if (typeof token.expires_in !== 'number' || token.expires_in <= 0) {
+                        if (typeof token.expires_in !== 'number' ||
+                            !Number.isFinite(token.expires_in) ||
+                            token.expires_in <= 0) {
                             this.expiresAt = Date.now() + FALLBACK_TOKEN_LIFETIME_MS;
                         }
                         this.tokenSiteOid = siteOid;
                         /*
-                         * Keep the existing refresh token if the server
-                         * does not return a replacement.
+                         * Persist the rotated refresh token before reporting
+                         * the refresh operation as successful.
                          */
-                        if (!this.refreshToken) {
-                            this.refreshToken = previousRefreshToken;
-                        }
                         return [4 /*yield*/, this.notifyTokenRefresh()];
                     case 5:
+                        /*
+                         * Persist the rotated refresh token before reporting
+                         * the refresh operation as successful.
+                         */
                         _c.sent();
                         return [2 /*return*/];
                 }
@@ -853,16 +915,27 @@ var SomfyCloudNewAuth = /** @class */ (function () {
      * - gatewayId
      * - region
      *
-     * This ensures that a restored session can identify
-     * the correct Somfy installation.
+     * The access token is never persisted.
      */
     SomfyCloudNewAuth.prototype.notifyTokenRefresh = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var session, changed, error_6;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var session, changed, _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
                         if (!this.refreshToken) {
+                            return [2 /*return*/];
+                        }
+                        /*
+                         * An account-wide token may exist before the user
+                         * has selected an installation.
+                         *
+                         * Such a token cannot yet be exported as a complete
+                         * Node-RED installation credential.
+                         */
+                        if (!this.selectedSiteOid ||
+                            !this.selectedGatewayId ||
+                            !this.selectedRegion) {
                             return [2 /*return*/];
                         }
                         session = this.getSession();
@@ -878,18 +951,29 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                             }
                             return [2 /*return*/];
                         }
-                        _a.label = 1;
+                        _b.label = 1;
                     case 1:
-                        _a.trys.push([1, 3, , 4]);
+                        _b.trys.push([1, 3, , 4]);
                         return [4 /*yield*/, this.tokenRefreshCallback(session)];
                     case 2:
-                        _a.sent();
+                        _b.sent();
+                        /*
+                         * Update persistence state only after the callback
+                         * has completed successfully.
+                         */
                         this.persistedRefreshToken = session.refreshToken;
+                        this.warnedMissingCallback = false;
                         return [3 /*break*/, 4];
                     case 3:
-                        error_6 = _a.sent();
-                        console.error('[Somfy OAuth] Unable to persist the updated session:', error_6 instanceof Error ? error_6.message : 'Unknown persistence error');
-                        return [3 /*break*/, 4];
+                        _a = _b.sent();
+                        /*
+                         * Do not log the callback error itself because it
+                         * could accidentally contain credential information.
+                         *
+                         * Do not silently treat the token as persisted.
+                         */
+                        throw new SomfyAuthError('Somfy authentication was refreshed, but the updated session could not be persisted. ' +
+                            'Check Node-RED credential storage before retrying.', undefined, 'SESSION_PERSISTENCE_FAILED');
                     case 4: return [2 /*return*/];
                 }
             });
@@ -926,38 +1010,67 @@ var SomfyCloudNewAuth = /** @class */ (function () {
     SomfyCloudNewAuth.prototype.toCredentials = function () {
         var session = this.getSession();
         this.persistedRefreshToken = session.refreshToken;
+        this.warnedMissingCallback = false;
         return session;
     };
     /* ---------------------------------------------------------------------- */
     /* Authentication headers                                                */
     /* ---------------------------------------------------------------------- */
     /**
-     * Return the authentication headers for the OverKiz API.
+     * Return the authorization headers for the selected installation.
+     *
+     * Ensures that a valid site-scoped token is available.
      */
-    SomfyCloudNewAuth.prototype.getAuthHeaders = function () {
+    SomfyCloudNewAuth.prototype.getHeaders = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, this.ensureSiteToken()];
+                    case 1:
+                        _a.sent();
+                        if (!this.accessToken) {
+                            throw new SomfyAuthError('No Somfy access token available');
+                        }
+                        return [2 /*return*/, {
+                                Authorization: "Bearer ".concat(this.accessToken),
+                                'Content-Type': 'application/json',
+                                Accept: 'application/json',
+                            }];
+                }
+            });
+        });
+    };
+    /**
+     * Ensure that a valid token scoped to the selected installation
+     * is available.
+     */
+    SomfyCloudNewAuth.prototype.ensureSiteToken = function () {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!this.loggedIn) {
-                            throw new SomfyAuthError('Somfy account is not authenticated');
+                        if (this.closed) {
+                            throw new SomfyAuthError('Somfy authentication instance is closed');
                         }
-                        if (!this.selectedSiteOid) {
-                            throw new SomfyNoGatewaySelectedError('No Somfy installation selected. ' +
-                                'Call discoverGateways() and selectGateway() first.');
+                        if (!this.selectedSiteOid || !this.selectedGatewayId) {
+                            throw new SomfyNoGatewaySelectedError('No Somfy gateway has been selected');
                         }
-                        return [4 /*yield*/, this.refreshIfNeeded()];
+                        if (!this.selectedRegion || !this.selectedEndpoint) {
+                            throw new SomfyAuthError('No regional Somfy API endpoint is configured');
+                        }
+                        if (!this.isExpired() && this.tokenSiteOid === this.selectedSiteOid) {
+                            return [2 /*return*/];
+                        }
+                        if (!this.refreshToken) {
+                            throw new SomfyAuthError('No Somfy refresh token available');
+                        }
+                        return [4 /*yield*/, this.refreshTokenWithLock(this.selectedSiteOid)];
                     case 1:
                         _a.sent();
-                        if (!this.accessToken) {
-                            throw new SomfyAuthError('No valid Somfy access token available');
+                        if (!this.accessToken || this.isExpired()) {
+                            throw new SomfyAuthError('Unable to obtain a valid Somfy site-scoped access token');
                         }
-                        if (this.tokenSiteOid !== this.selectedSiteOid) {
-                            throw new SomfyAuthError('Somfy access token is not scoped to the selected installation');
-                        }
-                        return [2 /*return*/, {
-                                Authorization: "Bearer ".concat(this.accessToken),
-                            }];
+                        return [2 /*return*/];
                 }
             });
         });
@@ -967,18 +1080,18 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         /* Public properties                                                      */
         /* ---------------------------------------------------------------------- */
         /**
-         * Return the selected OverKiz API endpoint.
+         * Return the selected regional API endpoint.
          */
         get: function () {
             if (!this.selectedEndpoint) {
-                throw new SomfyNoGatewaySelectedError('No Somfy installation selected');
+                throw new SomfyNoGatewaySelectedError('No Somfy gateway has been selected');
             }
             return this.selectedEndpoint;
         },
         enumerable: false,
         configurable: true
     });
-    Object.defineProperty(SomfyCloudNewAuth.prototype, "selectedSite", {
+    Object.defineProperty(SomfyCloudNewAuth.prototype, "siteOid", {
         /**
          * Return the selected site OID.
          */
@@ -988,22 +1101,12 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    Object.defineProperty(SomfyCloudNewAuth.prototype, "selectedGateway", {
+    Object.defineProperty(SomfyCloudNewAuth.prototype, "gatewayId", {
         /**
          * Return the selected gateway ID.
          */
         get: function () {
             return this.selectedGatewayId;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(SomfyCloudNewAuth.prototype, "availableGateways", {
-        /**
-         * Return the discovered installations.
-         */
-        get: function () {
-            return __spreadArray([], this.gateways, true);
         },
         enumerable: false,
         configurable: true
@@ -1018,19 +1121,124 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
+    Object.defineProperty(SomfyCloudNewAuth.prototype, "availableGateways", {
+        /**
+         * Return the available gateways.
+         *
+         * A copy is returned to prevent external modification
+         * of the internal gateway list.
+         */
+        get: function () {
+            return this.gateways.map(function (gateway) { return (__assign(__assign({}, gateway), { roles: __spreadArray([], gateway.roles, true) })); });
+        },
+        enumerable: false,
+        configurable: true
+    });
     /**
-     * Check whether authentication has been initialized.
+     * Return whether authentication has been initialized.
      */
     SomfyCloudNewAuth.prototype.isAuthenticated = function () {
-        return this.loggedIn && !!this.refreshToken;
+        return this.loggedIn && !this.closed;
+    };
+    /**
+     * Authentication headers. This preserves the existing getHeaders() implementation while satisfying SomfyCloudApi.
+     */
+    SomfyCloudNewAuth.prototype.getAuthHeaders = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2 /*return*/, this.getHeaders()];
+            });
+        });
+    };
+    Object.defineProperty(SomfyCloudNewAuth.prototype, "hasSelectedGateway", {
+        /**
+         * Return whether a gateway has been selected.
+         */
+        get: function () {
+            return Boolean(this.selectedGatewayId && this.selectedSiteOid && this.selectedEndpoint);
+        },
+        enumerable: false,
+        configurable: true
+    });
+    /* ---------------------------------------------------------------------- */
+    /* Token management                                                       */
+    /* ---------------------------------------------------------------------- */
+    /**
+     * Update the current access and refresh tokens.
+     */
+    SomfyCloudNewAuth.prototype.updateToken = function (token) {
+        if (!token.access_token) {
+            throw new SomfyAuthError('Somfy authentication response contains no access token');
+        }
+        this.accessToken = token.access_token;
+        /*
+         * Refresh tokens may be rotated by Ginaite.
+         * Preserve the previous token when no replacement is returned.
+         */
+        if (token.refresh_token) {
+            this.refreshToken = token.refresh_token;
+        }
+        var expiresIn = typeof token.expires_in === 'number' &&
+            Number.isFinite(token.expires_in) &&
+            token.expires_in > 0
+            ? token.expires_in
+            : FALLBACK_TOKEN_LIFETIME_MS / 1000;
+        this.expiresAt = Date.now() + expiresIn * 1000;
+    };
+    /* ---------------------------------------------------------------------- */
+    /* Session restoration                                                    */
+    /* ---------------------------------------------------------------------- */
+    /**
+     * Restore a previously persisted session.
+     *
+     * This method is useful when the configuration node
+     * receives updated credentials without being recreated.
+     */
+    SomfyCloudNewAuth.prototype.restoreSession = function (session) {
+        if (this.closed) {
+            throw new SomfyAuthError('Cannot restore a closed Somfy authentication instance');
+        }
+        if (!session ||
+            typeof session.refreshToken !== 'string' ||
+            !session.refreshToken ||
+            typeof session.siteOid !== 'string' ||
+            !session.siteOid ||
+            typeof session.gatewayId !== 'string' ||
+            !session.gatewayId ||
+            typeof session.region !== 'string' ||
+            !session.region) {
+            throw new SomfyAuthError('Invalid Somfy OAuth session');
+        }
+        var endpoint = REGION_ENDPOINTS[session.region];
+        if (!endpoint) {
+            throw new SomfyAuthError("Unknown Somfy region: ".concat(session.region));
+        }
+        this.refreshToken = session.refreshToken;
+        this.persistedRefreshToken = session.refreshToken;
+        this.selectedSiteOid = session.siteOid;
+        this.selectedGatewayId = session.gatewayId;
+        this.selectedRegion = session.region;
+        this.selectedEndpoint = endpoint;
+        /*
+         * The access token is not restored.
+         * A new site-scoped token must be obtained.
+         */
+        this.accessToken = null;
+        this.expiresAt = 0;
+        this.tokenSiteOid = null;
+        this.loggedIn = true;
     };
     /* ---------------------------------------------------------------------- */
     /* Logout                                                                 */
     /* ---------------------------------------------------------------------- */
     /**
-     * Clear the in-memory authentication context.
+     * Clear the local authentication session.
      *
-     * This does not revoke tokens on Somfy servers.
+     * This deliberately does not revoke the remote refresh token.
+     * It only clears the credentials and tokens held in memory.
+     *
+     * The method is synchronous for compatibility with existing
+     * SomfyCloudApi logout handling.
      */
     SomfyCloudNewAuth.prototype.logout = function () {
         this.closed = true;
@@ -1039,55 +1247,76 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         this.refreshToken = null;
         this.expiresAt = 0;
         this.tokenSiteOid = null;
+        this.gateways = [];
         this.selectedSiteOid = null;
         this.selectedGatewayId = null;
         this.selectedRegion = null;
         this.selectedEndpoint = null;
-        this.gateways = [];
+        this.persistedRefreshToken = null;
         this.tokenRefreshCallback = undefined;
-        this.refreshPromise = null;
-        this.loginPromise = null;
-    };
-    /* ---------------------------------------------------------------------- */
-    /* Token management                                                       */
-    /* ---------------------------------------------------------------------- */
-    /**
-     * Update the local token context from an OAuth response.
-     */
-    SomfyCloudNewAuth.prototype.updateToken = function (token) {
-        if (token.access_token) {
-            this.accessToken = token.access_token;
-        }
-        if (token.refresh_token) {
-            this.refreshToken = token.refresh_token;
-        }
-        if (typeof token.expires_in === 'number' && token.expires_in > 0) {
-            this.expiresAt = Date.now() + token.expires_in * 1000;
-        }
     };
     /* ---------------------------------------------------------------------- */
     /* HTTP error handling                                                    */
     /* ---------------------------------------------------------------------- */
     /**
-     * Convert Axios errors into useful authentication errors.
+     * Convert Axios errors into safe Somfy authentication errors.
+     *
+     * Never include request headers, passwords, tokens or request bodies
+     * in an error message.
      */
     SomfyCloudNewAuth.prototype.mapHttpError = function (error, fallbackMessage) {
         var _a, _b;
-        var axiosError = error;
-        if (!axiosError.isAxiosError) {
-            return new SomfyAuthError(error instanceof Error ? error.message : fallbackMessage);
+        if (error instanceof SomfyAuthError) {
+            return error;
         }
+        if (!axios_1.default.isAxiosError(error)) {
+            return new SomfyAuthError(fallbackMessage);
+        }
+        var axiosError = error;
         var status = (_a = axiosError.response) === null || _a === void 0 ? void 0 : _a.status;
         var responseData = (_b = axiosError.response) === null || _b === void 0 ? void 0 : _b.data;
-        var code = responseData === null || responseData === void 0 ? void 0 : responseData.error;
-        var message = (responseData === null || responseData === void 0 ? void 0 : responseData.error_description) ||
-            (responseData === null || responseData === void 0 ? void 0 : responseData.message) ||
-            axiosError.message ||
-            fallbackMessage;
-        if (code === 'invalid_grant' || code === 'error.invalid.grant') {
-            return new SomfyBadCredentialsError(message);
+        var errorCode = responseData === null || responseData === void 0 ? void 0 : responseData.error;
+        /*
+         * Invalid credentials or revoked refresh token.
+         */
+        if (errorCode === 'invalid_grant' ||
+            errorCode === 'invalid_credentials' ||
+            status === 401) {
+            return new SomfyBadCredentialsError('Somfy authentication failed. Check the credentials or refresh token.');
         }
-        return new SomfyAuthError("".concat(fallbackMessage, ": ").concat(message), status, code);
+        /*
+         * Insufficient permissions.
+         */
+        if (status === 403) {
+            return new SomfyAuthError('Somfy authentication request was forbidden', status, 'FORBIDDEN');
+        }
+        /*
+         * Rate limiting.
+         */
+        if (status === 429) {
+            return new SomfyAuthError('Somfy authentication service rate limit exceeded', status, 'RATE_LIMITED');
+        }
+        /*
+         * Server-side errors.
+         */
+        if (status && status >= 500) {
+            return new SomfyAuthError('Somfy authentication service is temporarily unavailable', status, 'SERVER_ERROR');
+        }
+        /*
+         * Network errors.
+         */
+        if (axiosError.code === 'ECONNABORTED') {
+            return new SomfyAuthError('Somfy authentication request timed out', undefined, 'TIMEOUT');
+        }
+        if (axiosError.code === 'ECONNREFUSED' ||
+            axiosError.code === 'ENOTFOUND' ||
+            axiosError.code === 'ECONNRESET') {
+            return new SomfyAuthError('Unable to connect to the Somfy authentication service', undefined, axiosError.code);
+        }
+        /*
+         * Generic HTTP failure.
+         */
+        return new SomfyAuthError(fallbackMessage, status, errorCode || axiosError.code);
     };
     return SomfyCloudNewAuth;
 }());

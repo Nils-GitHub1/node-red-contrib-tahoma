@@ -22,13 +22,24 @@ interface TahomaScenario {
   name: string;
 }
 
-interface ExtendedConfigProps extends TahomaCloudConfigNodeDef {
-  gatewayId?: string;
-}
-
-interface ExtendedCredentials extends TahomaCloudCredentials {
+interface ExtendedCredentials {
   userId?: string;
   userPassword?: string;
+
+  oauthUserId?: string;
+  oauthUserPassword?: string;
+
+  refreshToken?: string;
+  siteOid?: string;
+  gatewayId?: string;
+  oauthRegion?: string;
+}
+
+interface ExtendedConfigProps extends nodered.NodeDef {
+  name: string;
+  authMethod?: 'legacy' | 'oauth';
+  region?: string;
+  gatewayId?: string;
 }
 
 interface OAuthTestRequest {
@@ -166,33 +177,49 @@ const serializeGateway = (
 export = (RED: nodered.NodeAPI): void => {
   RED.nodes.registerType(
     'tahoma-cloud-config',
-    function (
-      this: nodered.Node<ExtendedCredentials>,
-      props: ExtendedConfigProps,
-    ) {
+    function (this: nodered.Node, props: nodered.NodeDef) {
       RED.nodes.createNode(this, props);
 
-      this['name'] = props.name;
-      this['region'] = props.region;
-      this['authMethod'] = props.authMethod || 'legacy';
-      this['gatewayId'] = props.gatewayId || '';
+      const config = props as ExtendedConfigProps;
 
-      const credentials = (this.credentials || {}) as ExtendedCredentials;
+      this['name'] = config.name;
+      this['region'] = config.region;
+      this['authMethod'] = config.authMethod || 'legacy';
+      this['gatewayId'] = config.gatewayId || '';
 
-      const authMethod = props.authMethod || 'legacy';
+      // Credential access goes here
+      const credentials = this.credentials as ExtendedCredentials;
 
       const userId =
-        typeof credentials.userId === 'string' ? credentials.userId : undefined;
+        typeof credentials.userId === 'string' ? credentials.userId : '';
 
       const userPassword =
         typeof credentials.userPassword === 'string'
           ? credentials.userPassword
-          : undefined;
+          : '';
 
-      const serverUrl = REGIONAL_SERVERS[props.region];
+      const refreshToken =
+        typeof credentials.refreshToken === 'string'
+          ? credentials.refreshToken
+          : '';
+
+      const siteOid =
+        typeof credentials.siteOid === 'string' ? credentials.siteOid : '';
+
+      const gatewayId =
+        typeof credentials.gatewayId === 'string' ? credentials.gatewayId : '';
+
+      const oauthRegion =
+        typeof credentials.oauthRegion === 'string'
+          ? credentials.oauthRegion
+          : '';
+
+      const authMethod = config.authMethod || 'legacy';
+
+      const serverUrl = REGIONAL_SERVERS[config.region];
 
       const savedGatewayId =
-        props.gatewayId || credentials.gatewayId || undefined;
+        config.gatewayId || credentials.gatewayId || undefined;
 
       /*
        * Shared API instance.
@@ -298,14 +325,11 @@ export = (RED: nodered.NodeAPI): void => {
              * SomfyCloudNewAuth.login().
              */
             if (authMethod === 'oauth' && oauthAuth) {
-              if (
-                savedGatewayId &&
-                oauthAuth.selectedGateway !== savedGatewayId
-              ) {
+              if (savedGatewayId && oauthAuth.gatewayId !== savedGatewayId) {
                 oauthAuth.selectGateway(savedGatewayId);
               }
 
-              if (!oauthAuth.selectedGateway) {
+              if (!oauthAuth.hasSelectedGateway) {
                 const gateways = oauthAuth.availableGateways;
 
                 if (gateways.length === 1) {
@@ -645,7 +669,7 @@ export = (RED: nodered.NodeAPI): void => {
          * Return discovered installations when no gateway
          * has yet been selected.
          */
-        if (!gatewayId && !testAuth.selectedGateway) {
+        if (!gatewayId && !testAuth.hasSelectedGateway) {
           response.json({
             success: true,
             authenticated: true,
@@ -661,7 +685,7 @@ export = (RED: nodered.NodeAPI): void => {
           testAuth.selectGateway(gatewayId);
         }
 
-        if (!testAuth.selectedGateway) {
+        if (!testAuth.hasSelectedGateway) {
           response.json({
             success: true,
             authenticated: true,

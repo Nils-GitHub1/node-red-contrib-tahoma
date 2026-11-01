@@ -507,9 +507,13 @@ export class SomfyCloudNewAuth {
 
       const page = data as ISomfyBobResponse;
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 863ca2e (new auth dev)
+=======
+
+>>>>>>> 8569636 (new auth dev)
       const results = Array.isArray(page.results) ? page.results : [];
 
       totalCount = Number(page.totalCount || 0);

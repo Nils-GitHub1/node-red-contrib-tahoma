@@ -183,23 +183,33 @@ export = (RED: nodered.NodeAPI): void => {
       const config = props as ExtendedConfigProps;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8569636 (new auth dev)
       this['name'] = config.name;
       this['region'] = config.region;
       this['authMethod'] = config.authMethod || 'legacy';
       this['gatewayId'] = config.gatewayId || '';
+<<<<<<< HEAD
 =======
       const credentials = (this.credentials || {}) as ExtendedCredentials;
 >>>>>>> 863ca2e (new auth dev)
+=======
+>>>>>>> 8569636 (new auth dev)
 
       // Credential access goes here
       const credentials = this.credentials as ExtendedCredentials;
 
       const userId =
 <<<<<<< HEAD
+<<<<<<< HEAD
         typeof credentials.userId === 'string' ? credentials.userId : '';
 =======
         typeof credentials.userId === 'string' ? credentials.userId : undefined;
 >>>>>>> 863ca2e (new auth dev)
+=======
+        typeof credentials.userId === 'string' ? credentials.userId : '';
+>>>>>>> 8569636 (new auth dev)
 
       const userPassword =
         typeof credentials.userPassword === 'string'
@@ -678,10 +688,14 @@ export = (RED: nodered.NodeAPI): void => {
          * has yet been selected.
          */
 <<<<<<< HEAD
+<<<<<<< HEAD
         if (!gatewayId && !testAuth.hasSelectedGateway) {
 =======
         if (!gatewayId && !testAuth.selectedGateway) {
 >>>>>>> 863ca2e (new auth dev)
+=======
+        if (!gatewayId && !testAuth.hasSelectedGateway) {
+>>>>>>> 8569636 (new auth dev)
           response.json({
             success: true,
             authenticated: true,
@@ -698,10 +712,14 @@ export = (RED: nodered.NodeAPI): void => {
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         if (!testAuth.hasSelectedGateway) {
 =======
         if (!testAuth.selectedGateway) {
 >>>>>>> 863ca2e (new auth dev)
+=======
+        if (!testAuth.hasSelectedGateway) {
+>>>>>>> 8569636 (new auth dev)
           response.json({
             success: true,
             authenticated: true,

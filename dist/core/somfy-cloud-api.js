@@ -296,19 +296,39 @@ var SomfyCloudApi = /** @class */ (function () {
      * The OAuth authentication strategy automatically handles
      * access-token expiration and refresh before returning headers.
      *
+     * If Somfy rejects an OAuth access token with HTTP 401,
+     * the rejected token is invalidated without deleting the
+     * refresh token or selected installation.
+     *
+     * The failed request is deliberately not retried automatically.
+     *
      * Axios errors are deliberately preserved so that the
      * configuration node can inspect HTTP status and error codes.
      */
     SomfyCloudApi.prototype.request = function (options) {
         return __awaiter(this, void 0, void 0, function () {
-            var authHeaders, config;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var authHeaders, config, error_2;
+            var _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0: return [4 /*yield*/, this.getAuthenticationHeaders()];
                     case 1:
-                        authHeaders = _a.sent();
+                        authHeaders = _b.sent();
                         config = __assign(__assign({}, options), { headers: __assign(__assign({}, options.headers), authHeaders) });
-                        return [2 /*return*/, this.axiosInstance.request(config)];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, 4, , 5]);
+                        return [4 /*yield*/, this.axiosInstance.request(config)];
+                    case 3: return [2 /*return*/, _b.sent()];
+                    case 4:
+                        error_2 = _b.sent();
+                        if (this.authMethod === 'oauth' &&
+                            axios_1.default.isAxiosError(error_2) &&
+                            ((_a = error_2.response) === null || _a === void 0 ? void 0 : _a.status) === 401) {
+                            this.invalidateSession();
+                        }
+                        throw error_2;
+                    case 5: return [2 /*return*/];
                 }
             });
         });
@@ -320,13 +340,16 @@ var SomfyCloudApi = /** @class */ (function () {
      * Clears the JSESSIONID.
      *
      * OAuth:
-     * Does not delete the refresh token. A subsequent request
-     * can continue using the OAuth refresh mechanism.
+     * Invalidates the current access token without deleting
+     * the refresh token or selected installation.
      */
     SomfyCloudApi.prototype.invalidateSession = function () {
+        var _a;
         if (this.authMethod === 'legacy') {
             this.sessionId = null;
+            return;
         }
+        (_a = this.oauthAuth) === null || _a === void 0 ? void 0 : _a.invalidateAccessToken();
     };
     /**
      * Clear the local authentication context.

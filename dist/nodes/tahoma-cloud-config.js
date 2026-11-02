@@ -97,6 +97,15 @@ var safeLogout = function (api) {
     }
 };
 /**
+ * Check whether stored credentials contain a complete OAuth session.
+ */
+var hasCompleteOAuthSession = function (credentials) {
+    return Boolean((credentials === null || credentials === void 0 ? void 0 : credentials.refreshToken) &&
+        (credentials === null || credentials === void 0 ? void 0 : credentials.siteOid) &&
+        (credentials === null || credentials === void 0 ? void 0 : credentials.gatewayId) &&
+        (credentials === null || credentials === void 0 ? void 0 : credentials.oauthRegion));
+};
+/**
  * Persist the complete OAuth session in Node-RED credentials.
  *
  * Node-RED encrypts credentials at rest.
@@ -142,7 +151,7 @@ module.exports = function (RED) {
         this['authMethod'] = config.authMethod || 'legacy';
         this['gatewayId'] = config.gatewayId || '';
         // Credential access goes here
-        var credentials = this.credentials;
+        var credentials = (this.credentials || {});
         var userId = typeof credentials.userId === 'string' ? credentials.userId : '';
         var userPassword = typeof credentials.userPassword === 'string'
             ? credentials.userPassword
@@ -176,13 +185,15 @@ module.exports = function (RED) {
          * Authentication initialization.
          */
         if (authMethod === 'oauth') {
-            if (userId && userPassword) {
+            var hasPasswordCredentials = Boolean(userId && userPassword);
+            var hasSavedSession = hasCompleteOAuthSession(credentials);
+            if (hasPasswordCredentials || hasSavedSession) {
                 oauthAuth = new somfy_cloud_new_auth_1.SomfyCloudNewAuth({
-                    username: userId,
-                    password: userPassword,
+                    username: userId || undefined,
+                    password: userPassword || undefined,
                     refreshToken: credentials.refreshToken,
                     siteOid: credentials.siteOid,
-                    gatewayId: savedGatewayId,
+                    gatewayId: credentials.gatewayId,
                     region: credentials.oauthRegion,
                 });
                 api = new somfy_cloud_api_1.SomfyCloudApi(oauthAuth);
@@ -232,47 +243,46 @@ module.exports = function (RED) {
                     return __generator(this, function (_a) {
                         switch (_a.label) {
                             case 0:
-                                _a.trys.push([0, 2, 3, 4]);
+                                _a.trys.push([0, 5, 6, 7]);
                                 return [4 /*yield*/, api.login()];
                             case 1:
                                 _a.sent();
                                 if (closing) {
                                     throw new Error('TaHoma Cloud configuration is closing');
                                 }
-                                /*
-                                 * OAuth login discovers installations.
-                                 *
-                                 * A previously saved gateway is restored by
-                                 * SomfyCloudNewAuth.login().
-                                 */
-                                if (authMethod === 'oauth' && oauthAuth) {
-                                    if (savedGatewayId && oauthAuth.gatewayId !== savedGatewayId) {
-                                        oauthAuth.selectGateway(savedGatewayId);
+                                if (!(authMethod === 'oauth' && oauthAuth)) return [3 /*break*/, 4];
+                                if (!(savedGatewayId && oauthAuth.gatewayId !== savedGatewayId)) return [3 /*break*/, 3];
+                                return [4 /*yield*/, oauthAuth.discoverGateways()];
+                            case 2:
+                                _a.sent();
+                                oauthAuth.selectGateway(savedGatewayId);
+                                _a.label = 3;
+                            case 3:
+                                if (!oauthAuth.hasSelectedGateway) {
+                                    gateways = oauthAuth.availableGateways;
+                                    if (gateways.length === 1) {
+                                        oauthAuth.selectGateway(gateways[0].gatewayId);
                                     }
-                                    if (!oauthAuth.hasSelectedGateway) {
-                                        gateways = oauthAuth.availableGateways;
-                                        if (gateways.length === 1) {
-                                            oauthAuth.selectGateway(gateways[0].gatewayId);
-                                        }
-                                        else {
-                                            throw new Error('No Somfy installation is selected. ' +
-                                                'Select an installation in the TaHoma Cloud configuration.');
-                                        }
+                                    else {
+                                        throw new Error('No Somfy installation is selected. ' +
+                                            'Select an installation in the TaHoma Cloud configuration.');
                                     }
-                                    session = oauthAuth.toCredentials();
-                                    persistOAuthCredentials(RED, this.id, credentials, session);
                                 }
+                                session = oauthAuth.toCredentials();
+                                persistOAuthCredentials(RED, this.id, credentials, session);
+                                _a.label = 4;
+                            case 4:
                                 authenticated = true;
                                 RED.log.info("[TaHoma Cloud] ".concat(authMethod.toUpperCase(), " authentication successful"));
-                                return [3 /*break*/, 4];
-                            case 2:
+                                return [3 /*break*/, 7];
+                            case 5:
                                 error_1 = _a.sent();
                                 authenticated = false;
                                 throw error_1;
-                            case 3:
+                            case 6:
                                 loginPromise = null;
                                 return [7 /*endfinally*/];
-                            case 4: return [2 /*return*/];
+                            case 7: return [2 /*return*/];
                         }
                     });
                 }); })();
@@ -506,17 +516,19 @@ module.exports = function (RED) {
             oauthRegion: { type: 'text' },
         },
     });
+    // Block 2 continues here with the HTTP admin endpoints.
     /**
      * Test Somfy Cloud connection.
      *
      * Supports both legacy and OAuth authentication.
      *
      * OAuth testing:
-     * - First request discovers installations.
-     * - Second request validates the selected installation.
+     * - Discovers installations.
+     * - Validates the selected installation.
+     * - Supports an existing refresh-token session.
      */
     RED.httpAdmin.post('/somfy/cloud/test', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
-        var body, configNodeId, submittedUserId, submittedPassword, region, gatewayId, authMethod, configNode, storedCredentials, userId, userPassword, testApi, testAuth, authenticated, gateways, actionGroups_1, session, serverUrl, actionGroups, error_5, details, status_1;
+        var body, configNodeId, submittedUserId, submittedPassword, region, gatewayId, authMethod, configNode, storedCredentials, userId, userPassword, hasStoredOAuthSession, testApi, testAuth, authenticated, gateways, actionGroups_1, session, serverUrl, actionGroups, error_5, details, status_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -529,11 +541,29 @@ module.exports = function (RED) {
                     storedCredentials = configNode === null || configNode === void 0 ? void 0 : configNode.credentials;
                     userId = submittedUserId || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userId);
                     userPassword = submittedPassword || (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.userPassword);
-                    if (!userId || !userPassword) {
+                    hasStoredOAuthSession = typeof (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.refreshToken) === 'string' &&
+                        Boolean(storedCredentials.refreshToken) &&
+                        typeof (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.siteOid) === 'string' &&
+                        Boolean(storedCredentials.siteOid) &&
+                        typeof (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.gatewayId) === 'string' &&
+                        Boolean(storedCredentials.gatewayId) &&
+                        typeof (storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.oauthRegion) === 'string' &&
+                        Boolean(storedCredentials.oauthRegion);
+                    if (authMethod === 'legacy' && (!userId || !userPassword)) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
                         response.json({
                             success: false,
                             error: 'Missing Somfy email or password',
+                        });
+                        return [2 /*return*/];
+                    }
+                    if (authMethod === 'oauth' &&
+                        (!userId || !userPassword) &&
+                        !hasStoredOAuthSession) {
+                        response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
+                        response.json({
+                            success: false,
+                            error: 'Somfy email and password, or a valid stored OAuth session, are required',
                         });
                         return [2 /*return*/];
                     }
@@ -542,8 +572,8 @@ module.exports = function (RED) {
                     authenticated = false;
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 7, 8, 9]);
-                    if (!(authMethod === 'oauth')) return [3 /*break*/, 4];
+                    _a.trys.push([1, 8, 9, 10]);
+                    if (!(authMethod === 'oauth')) return [3 /*break*/, 5];
                     testAuth = new somfy_cloud_new_auth_1.SomfyCloudNewAuth({
                         username: userId,
                         password: userPassword,
@@ -557,6 +587,23 @@ module.exports = function (RED) {
                 case 2:
                     _a.sent();
                     authenticated = true;
+                    /*
+                     * Explicitly discover installations.
+                     *
+                     * This is important when restoring a previously
+                     * persisted OAuth session, because login may restore
+                     * the selected session without performing discovery.
+                     */
+                    return [4 /*yield*/, testAuth.discoverGateways()];
+                case 3:
+                    /*
+                     * Explicitly discover installations.
+                     *
+                     * This is important when restoring a previously
+                     * persisted OAuth session, because login may restore
+                     * the selected session without performing discovery.
+                     */
+                    _a.sent();
                     gateways = testAuth.availableGateways.map(serializeGateway);
                     /*
                      * Return discovered installations when no gateway
@@ -586,7 +633,7 @@ module.exports = function (RED) {
                         return [2 /*return*/];
                     }
                     return [4 /*yield*/, testApi.getActionGroups()];
-                case 3:
+                case 4:
                     actionGroups_1 = _a.sent();
                     session = testAuth.toCredentials();
                     response.json({
@@ -601,7 +648,7 @@ module.exports = function (RED) {
                     RED.log.info("[TaHoma Cloud Test] OAuth connection successful. " +
                         "".concat(actionGroups_1.length, " scenarios discovered."));
                     return [2 /*return*/];
-                case 4:
+                case 5:
                     serverUrl = REGIONAL_SERVERS[region || 'europe'];
                     if (!serverUrl) {
                         response.status(http_response_enum_1.HttpResponse.BAD_REQUEST);
@@ -613,11 +660,11 @@ module.exports = function (RED) {
                     }
                     testApi = new somfy_cloud_api_1.SomfyCloudApi(userId, userPassword, serverUrl);
                     return [4 /*yield*/, testApi.login()];
-                case 5:
+                case 6:
                     _a.sent();
                     authenticated = true;
                     return [4 /*yield*/, testApi.getActionGroups()];
-                case 6:
+                case 7:
                     actionGroups = _a.sent();
                     response.json({
                         success: true,
@@ -626,8 +673,8 @@ module.exports = function (RED) {
                     });
                     RED.log.info("[TaHoma Cloud Test] Legacy connection successful. " +
                         "".concat(actionGroups.length, " scenarios discovered."));
-                    return [3 /*break*/, 9];
-                case 7:
+                    return [3 /*break*/, 10];
+                case 8:
                     error_5 = _a.sent();
                     details = getErrorDetails(error_5);
                     RED.log.error("[TaHoma Cloud Test] ".concat(authMethod, " connection failed. ") +
@@ -648,8 +695,8 @@ module.exports = function (RED) {
                             httpStatus: details.status,
                         });
                     }
-                    return [3 /*break*/, 9];
-                case 8:
+                    return [3 /*break*/, 10];
+                case 9:
                     if (testApi) {
                         safeLogout(testApi);
                     }
@@ -657,7 +704,7 @@ module.exports = function (RED) {
                         testAuth.logout();
                     }
                     return [7 /*endfinally*/];
-                case 9: return [2 /*return*/];
+                case 10: return [2 /*return*/];
             }
         });
     }); });

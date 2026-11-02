@@ -281,6 +281,12 @@ export class SomfyCloudApi {
    * The OAuth authentication strategy automatically handles
    * access-token expiration and refresh before returning headers.
    *
+   * If Somfy rejects an OAuth access token with HTTP 401,
+   * the rejected token is invalidated without deleting the
+   * refresh token or selected installation.
+   *
+   * The failed request is deliberately not retried automatically.
+   *
    * Axios errors are deliberately preserved so that the
    * configuration node can inspect HTTP status and error codes.
    */
@@ -295,7 +301,19 @@ export class SomfyCloudApi {
       },
     };
 
-    return this.axiosInstance.request(config);
+    try {
+      return await this.axiosInstance.request(config);
+    } catch (error) {
+      if (
+        this.authMethod === 'oauth' &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 401
+      ) {
+        this.invalidateSession();
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -305,13 +323,16 @@ export class SomfyCloudApi {
    * Clears the JSESSIONID.
    *
    * OAuth:
-   * Does not delete the refresh token. A subsequent request
-   * can continue using the OAuth refresh mechanism.
+   * Invalidates the current access token without deleting
+   * the refresh token or selected installation.
    */
   public invalidateSession(): void {
     if (this.authMethod === 'legacy') {
       this.sessionId = null;
+      return;
     }
+
+    this.oauthAuth?.invalidateAccessToken();
   }
 
   /**

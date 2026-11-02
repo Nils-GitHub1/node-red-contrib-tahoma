@@ -9,6 +9,10 @@ import * as nodered from 'node-red';
  * oauth:
  *   New Somfy Accounts + Ginaite OAuth authentication.
  */
+
+/**
+ * Authentication methods supported by TaHoma Cloud.
+ */
 export type TahomaCloudAuthMethod = 'legacy' | 'oauth';
 
 /**
@@ -19,76 +23,47 @@ export interface TahomaCloudConfigNodeDef extends nodered.NodeDef {
 
   /**
    * Authentication method.
-   *
-   * Defaults to legacy for existing Node-RED configurations.
+   * Defaults to legacy for backward compatibility.
    */
   authMethod?: TahomaCloudAuthMethod;
 
   /**
    * Legacy regional server.
-   *
-   * Retained for backward compatibility.
    */
   region?: string;
+
+  /**
+   * Selected OAuth installation gateway.
+   */
+  gatewayId?: string;
 }
 
 /**
  * Credentials stored by the Node-RED configuration node.
- *
- * Node-RED encrypts these credential properties.
  */
 export interface TahomaCloudCredentials {
   /**
-   * Legacy authentication credentials.
+   * Somfy account credentials.
    */
   userId?: string;
-
   userPassword?: string;
 
   /**
-   * New OAuth authentication credentials.
-   */
-  oauthUserId?: string;
-
-  oauthUserPassword?: string;
-
-  /**
-   * Rotating Ginaite refresh token.
+   * OAuth session credentials.
    */
   refreshToken?: string;
-
-  /**
-   * Selected Somfy installation.
-   */
   siteOid?: string;
-
-  /**
-   * Selected Somfy gateway.
-   */
   gatewayId?: string;
-
-  /**
-   * Selected regional API identifier.
-   *
-   * Expected values:
-   * EMEA, APAC or SNABA.
-   */
   oauthRegion?: string;
 }
 
 /**
  * Complete OAuth session state.
- *
- * All four properties must be persisted together whenever
- * the selected installation or refresh token changes.
  */
 export interface TahomaCloudOAuthSession {
   refreshToken: string;
-
   siteOid: string;
-
   gatewayId: string;
-
   region: string;
 }
 
@@ -97,6 +72,5 @@ export interface TahomaCloudOAuthSession {
  */
 export interface TahomaCloudScenario {
   id: string;
-
   name: string;
 }

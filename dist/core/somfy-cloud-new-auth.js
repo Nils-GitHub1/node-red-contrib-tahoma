@@ -73,6 +73,18 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SomfyCloudNewAuth = exports.SomfyNoGatewaySelectedError = exports.SomfyBadCredentialsError = exports.SomfyAuthError = void 0;
 var axios_1 = require("axios");
+/*
+ * Somfy OAuth implementation.
+ *
+ * Adapted from the Python OAuth implementation in:
+ * https://github.com/iMicknl/python-overkiz-api
+ *
+ * Original copyright: Copyright (c) 2020 Mick Vleeshouwer
+ *
+ * Original license: MIT
+ *
+ * Translated and adapted for @Nils-GitHub1/node-red-contrib-tahoma.
+ */
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -82,9 +94,15 @@ var SOMFY_GINAITE_SUBJECT_ISSUER = 'somfy-customer';
 var SOMFY_GINAITE_TOKEN_EXCHANGE_GRANT = 'urn:ietf:params:oauth:grant-type:token-exchange';
 var SOMFY_GINAITE_SUBJECT_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
 var SOMFY_BOB_SITE_API = 'https://backoffice-service.ovkube.net/site-api/public/v1';
-var SOMFY_CLIENT_ID = process.env.SOMFY_CLIENT_ID || '';
-var SOMFY_CLIENT_SECRET = process.env.SOMFY_CLIENT_SECRET || '';
-var SOMFY_BOB_API_KEY = process.env.SOMFY_BOB_API_KEY || '';
+/*
+ * Somfy OAuth application constants.
+ *
+ * These values are taken from the public pyOverkiz implementation.
+ * They are application identifiers, not Node-RED user credentials.
+ */
+var SOMFY_CLIENT_ID = '0d8e920c-1478-11e7-a377-02dd59bd3041_1ewvaqmclfogo4kcsoo0c8k4kso884owg08sg8c40sk4go4ksg';
+var SOMFY_CLIENT_SECRET = '12k73w1n540g8o4cokg0cw84cog840k84cwggscwg884004kgk';
+var SOMFY_BOB_API_KEY = '184638B3FBE874ACD24C14FBD657B';
 var SOMFY_BOB_PAGE_SIZE = 20;
 var SOMFY_BOB_MAX_SITES = 200;
 var TOKEN_EXPIRY_MARGIN_MS = 30000;
@@ -209,15 +227,6 @@ var SomfyCloudNewAuth = /** @class */ (function () {
         });
     }
     /* ---------------------------------------------------------------------- */
-    /* Configuration validation                                              */
-    /* ---------------------------------------------------------------------- */
-    SomfyCloudNewAuth.prototype.validateConfiguration = function () {
-        if (!SOMFY_CLIENT_ID || !SOMFY_CLIENT_SECRET || !SOMFY_BOB_API_KEY) {
-            throw new SomfyAuthError('Somfy OAuth configuration is incomplete. Configure ' +
-                'SOMFY_CLIENT_ID, SOMFY_CLIENT_SECRET and SOMFY_BOB_API_KEY.', undefined, 'CONFIGURATION_ERROR');
-        }
-    };
-    /* ---------------------------------------------------------------------- */
     /* Authentication                                                         */
     /* ---------------------------------------------------------------------- */
     /**
@@ -245,7 +254,6 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                         switch (_a.label) {
                             case 0:
                                 _a.trys.push([0, 4, 5, 6]);
-                                this.validateConfiguration();
                                 /*
                                  * Restore an existing complete session.
                                  */
@@ -381,7 +389,6 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                         body = new URLSearchParams();
                         body.append('grant_type', SOMFY_GINAITE_TOKEN_EXCHANGE_GRANT);
                         body.append('client_id', SOMFY_CLIENT_ID);
-                        body.append('client_secret', SOMFY_CLIENT_SECRET);
                         body.append('subject_token', ssoAccessToken);
                         body.append('subject_issuer', SOMFY_GINAITE_SUBJECT_ISSUER);
                         body.append('subject_token_type', SOMFY_GINAITE_SUBJECT_TOKEN_TYPE);
@@ -461,7 +468,7 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                                     gatewayId: gateway.gatewayId,
                                     homeId: siteOid,
                                     label: site.name || siteOid,
-                                    externalId: subSite.externalId,
+                                    externalId: subSite.externalOID || subSite.externalId,
                                     country: site.country,
                                     region: region,
                                     roles: roles
@@ -647,6 +654,18 @@ var SomfyCloudNewAuth = /** @class */ (function () {
             });
         });
     };
+    /**
+     * Invalidate the current access token without deleting
+     * the refresh token or the selected installation.
+     *
+     * This is used when Somfy rejects an access token
+     * before its locally calculated expiration time.
+     */
+    SomfyCloudNewAuth.prototype.invalidateAccessToken = function () {
+        this.accessToken = null;
+        this.expiresAt = 0;
+        this.tokenSiteOid = null;
+    };
     /* ---------------------------------------------------------------------- */
     /* Serialized token refresh                                               */
     /* ---------------------------------------------------------------------- */
@@ -729,7 +748,6 @@ var SomfyCloudNewAuth = /** @class */ (function () {
                         body = new URLSearchParams();
                         body.append('grant_type', 'refresh_token');
                         body.append('client_id', SOMFY_CLIENT_ID);
-                        body.append('client_secret', SOMFY_CLIENT_SECRET);
                         body.append('refresh_token', previousRefreshToken);
                         _c.label = 1;
                     case 1:

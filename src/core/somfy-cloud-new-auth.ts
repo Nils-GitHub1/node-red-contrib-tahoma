@@ -33,9 +33,20 @@ const SOMFY_GINAITE_SUBJECT_TOKEN_TYPE =
 const SOMFY_BOB_SITE_API =
   'https://backoffice-service.ovkube.net/site-api/public/v1';
 
-const SOMFY_CLIENT_ID = process.env.SOMFY_CLIENT_ID || '';
-const SOMFY_CLIENT_SECRET = process.env.SOMFY_CLIENT_SECRET || '';
-const SOMFY_BOB_API_KEY = process.env.SOMFY_BOB_API_KEY || '';
+/*
+ * Somfy OAuth application constants.
+ *
+ * These values are taken from the public pyOverkiz implementation.
+ * They are application identifiers, not Node-RED user credentials.
+ */
+
+const SOMFY_CLIENT_ID =
+  '0d8e920c-1478-11e7-a377-02dd59bd3041_1ewvaqmclfogo4kcsoo0c8k4kso884owg08sg8c40sk4go4ksg';
+
+const SOMFY_CLIENT_SECRET =
+  '12k73w1n540g8o4cokg0cw84cog840k84cwggscwg884004kgk';
+
+const SOMFY_BOB_API_KEY = '184638B3FBE874ACD24C14FBD657B';
 
 const SOMFY_BOB_PAGE_SIZE = 20;
 const SOMFY_BOB_MAX_SITES = 200;
@@ -137,6 +148,7 @@ interface ISomfyBobRole {
 }
 
 interface ISomfyBobSubSite {
+  externalOID?: string;
   externalId?: string;
   gateways?: ISomfyBobGateway[];
 }
@@ -284,21 +296,6 @@ export class SomfyCloudNewAuth {
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Configuration validation                                              */
-  /* ---------------------------------------------------------------------- */
-
-  private validateConfiguration(): void {
-    if (!SOMFY_CLIENT_ID || !SOMFY_CLIENT_SECRET || !SOMFY_BOB_API_KEY) {
-      throw new SomfyAuthError(
-        'Somfy OAuth configuration is incomplete. Configure ' +
-          'SOMFY_CLIENT_ID, SOMFY_CLIENT_SECRET and SOMFY_BOB_API_KEY.',
-        undefined,
-        'CONFIGURATION_ERROR',
-      );
-    }
-  }
-
-  /* ---------------------------------------------------------------------- */
   /* Authentication                                                         */
   /* ---------------------------------------------------------------------- */
 
@@ -321,8 +318,6 @@ export class SomfyCloudNewAuth {
 
     this.loginPromise = (async () => {
       try {
-        this.validateConfiguration();
-
         /*
          * Restore an existing complete session.
          */
@@ -459,7 +454,6 @@ export class SomfyCloudNewAuth {
 
     body.append('grant_type', SOMFY_GINAITE_TOKEN_EXCHANGE_GRANT);
     body.append('client_id', SOMFY_CLIENT_ID);
-    body.append('client_secret', SOMFY_CLIENT_SECRET);
     body.append('subject_token', ssoAccessToken);
     body.append('subject_issuer', SOMFY_GINAITE_SUBJECT_ISSUER);
     body.append('subject_token_type', SOMFY_GINAITE_SUBJECT_TOKEN_TYPE);
@@ -550,7 +544,7 @@ export class SomfyCloudNewAuth {
             gatewayId: gateway.gatewayId,
             homeId: siteOid,
             label: site.name || siteOid,
-            externalId: subSite.externalId,
+            externalId: subSite.externalOID || subSite.externalId,
             country: site.country,
             region,
             roles: roles
@@ -747,6 +741,19 @@ export class SomfyCloudNewAuth {
     return true;
   }
 
+  /**
+   * Invalidate the current access token without deleting
+   * the refresh token or the selected installation.
+   *
+   * This is used when Somfy rejects an access token
+   * before its locally calculated expiration time.
+   */
+  public invalidateAccessToken(): void {
+    this.accessToken = null;
+    this.expiresAt = 0;
+    this.tokenSiteOid = null;
+  }
+
   /* ---------------------------------------------------------------------- */
   /* Serialized token refresh                                               */
   /* ---------------------------------------------------------------------- */
@@ -824,7 +831,6 @@ export class SomfyCloudNewAuth {
 
     body.append('grant_type', 'refresh_token');
     body.append('client_id', SOMFY_CLIENT_ID);
-    body.append('client_secret', SOMFY_CLIENT_SECRET);
     body.append('refresh_token', previousRefreshToken);
 
     let response;

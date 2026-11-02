@@ -115,6 +115,20 @@ const safeLogout = (api: SomfyCloudApi): void => {
 };
 
 /**
+ * Check whether stored credentials contain a complete OAuth session.
+ */
+const hasCompleteOAuthSession = (
+  credentials?: ExtendedCredentials,
+): boolean => {
+  return Boolean(
+    credentials?.refreshToken &&
+    credentials?.siteOid &&
+    credentials?.gatewayId &&
+    credentials?.oauthRegion,
+  );
+};
+
+/**
  * Persist the complete OAuth session in Node-RED credentials.
  *
  * Node-RED encrypts credentials at rest.
@@ -184,7 +198,7 @@ export = (RED: nodered.NodeAPI): void => {
       this['gatewayId'] = config.gatewayId || '';
 
       // Credential access goes here
-      const credentials = this.credentials as ExtendedCredentials;
+      const credentials = (this.credentials || {}) as ExtendedCredentials;
 
       const userId =
         typeof credentials.userId === 'string' ? credentials.userId : '';
@@ -232,13 +246,16 @@ export = (RED: nodered.NodeAPI): void => {
        * Authentication initialization.
        */
       if (authMethod === 'oauth') {
-        if (userId && userPassword) {
+        const hasPasswordCredentials = Boolean(userId && userPassword);
+        const hasSavedSession = hasCompleteOAuthSession(credentials);
+
+        if (hasPasswordCredentials || hasSavedSession) {
           oauthAuth = new SomfyCloudNewAuth({
-            username: userId,
-            password: userPassword,
+            username: userId || undefined,
+            password: userPassword || undefined,
             refreshToken: credentials.refreshToken,
             siteOid: credentials.siteOid,
-            gatewayId: savedGatewayId,
+            gatewayId: credentials.gatewayId,
             region: credentials.oauthRegion,
           });
 
@@ -299,13 +316,17 @@ export = (RED: nodered.NodeAPI): void => {
             }
 
             /*
-             * OAuth login discovers installations.
+             * OAuth login discovers installations during a fresh
+             * password authentication.
              *
-             * A previously saved gateway is restored by
-             * SomfyCloudNewAuth.login().
+             * A restored session already contains its selected
+             * installation. If the configured gateway differs,
+             * discover installations before changing selection.
              */
             if (authMethod === 'oauth' && oauthAuth) {
               if (savedGatewayId && oauthAuth.gatewayId !== savedGatewayId) {
+                await oauthAuth.discoverGateways();
+
                 oauthAuth.selectGateway(savedGatewayId);
               }
 
@@ -575,14 +596,17 @@ export = (RED: nodered.NodeAPI): void => {
     },
   );
 
+  // Block 2 continues here with the HTTP admin endpoints.
+
   /**
    * Test Somfy Cloud connection.
    *
    * Supports both legacy and OAuth authentication.
    *
    * OAuth testing:
-   * - First request discovers installations.
-   * - Second request validates the selected installation.
+   * - Discovers installations.
+   * - Validates the selected installation.
+   * - Supports an existing refresh-token session.
    */
   RED.httpAdmin.post('/somfy/cloud/test', async (request, response) => {
     const body = (request.body || {}) as OAuthTestRequest;
@@ -609,12 +633,38 @@ export = (RED: nodered.NodeAPI): void => {
 
     const userPassword = submittedPassword || storedCredentials?.userPassword;
 
-    if (!userId || !userPassword) {
+    const hasStoredOAuthSession =
+      typeof storedCredentials?.refreshToken === 'string' &&
+      Boolean(storedCredentials.refreshToken) &&
+      typeof storedCredentials?.siteOid === 'string' &&
+      Boolean(storedCredentials.siteOid) &&
+      typeof storedCredentials?.gatewayId === 'string' &&
+      Boolean(storedCredentials.gatewayId) &&
+      typeof storedCredentials?.oauthRegion === 'string' &&
+      Boolean(storedCredentials.oauthRegion);
+
+    if (authMethod === 'legacy' && (!userId || !userPassword)) {
       response.status(HttpResponse.BAD_REQUEST);
 
       response.json({
         success: false,
         error: 'Missing Somfy email or password',
+      });
+
+      return;
+    }
+
+    if (
+      authMethod === 'oauth' &&
+      (!userId || !userPassword) &&
+      !hasStoredOAuthSession
+    ) {
+      response.status(HttpResponse.BAD_REQUEST);
+
+      response.json({
+        success: false,
+        error:
+          'Somfy email and password, or a valid stored OAuth session, are required',
       });
 
       return;
@@ -642,6 +692,15 @@ export = (RED: nodered.NodeAPI): void => {
         await testApi.login();
 
         authenticated = true;
+
+        /*
+         * Explicitly discover installations.
+         *
+         * This is important when restoring a previously
+         * persisted OAuth session, because login may restore
+         * the selected session without performing discovery.
+         */
+        await testAuth.discoverGateways();
 
         const gateways = testAuth.availableGateways.map(serializeGateway);
 
@@ -715,7 +774,7 @@ export = (RED: nodered.NodeAPI): void => {
         return;
       }
 
-      testApi = new SomfyCloudApi(userId, userPassword, serverUrl);
+      testApi = new SomfyCloudApi(userId!, userPassword!, serverUrl);
 
       await testApi.login();
 

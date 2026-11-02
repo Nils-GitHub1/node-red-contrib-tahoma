@@ -19,7 +19,7 @@
     "type": "git",
     "url": "git+https://github.com/Nils-GitHub1/node-red-contrib-tahoma.git"
   },
-  "license": "Apache-2.0",
+  "license": "Apache-2.0 AND MIT",
   "author": "Nicolas Nunge <me@nikkow.eu> (https://github.com/nikkow/node-red-contrib-tahoma)",
   "contributors": [
     {

@@ -1,5 +1,18 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 
+/*
+ * Somfy OAuth implementation.
+ *
+ * Adapted from the Python OAuth implementation in:
+ * https://github.com/iMicknl/python-overkiz-api
+ *
+ * Original copyright: Copyright (c) 2020 Mick Vleeshouwer
+ *
+ * Original license: MIT
+ *
+ * Translated and adapted for @Nils-GitHub1/node-red-contrib-tahoma.
+ */
+
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */

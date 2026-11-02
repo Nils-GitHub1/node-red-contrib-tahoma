@@ -136,18 +136,20 @@ module.exports = function (RED) {
     RED.nodes.registerType('tahoma-cloud-config', function (props) {
         var _this = this;
         RED.nodes.createNode(this, props);
-        this['name'] = props.name;
-        this['region'] = props.region;
-        this['authMethod'] = props.authMethod || 'legacy';
-        this['gatewayId'] = props.gatewayId || '';
-        var credentials = (this.credentials || {});
-        var authMethod = props.authMethod || 'legacy';
-        var userId = typeof credentials.userId === 'string' ? credentials.userId : undefined;
+        var config = props;
+        this['name'] = config.name;
+        this['region'] = config.region;
+        this['authMethod'] = config.authMethod || 'legacy';
+        this['gatewayId'] = config.gatewayId || '';
+        // Credential access goes here
+        var credentials = this.credentials;
+        var userId = typeof credentials.userId === 'string' ? credentials.userId : '';
         var userPassword = typeof credentials.userPassword === 'string'
             ? credentials.userPassword
-            : undefined;
-        var serverUrl = REGIONAL_SERVERS[props.region];
-        var savedGatewayId = props.gatewayId || credentials.gatewayId || undefined;
+            : '';
+        var authMethod = config.authMethod || 'legacy';
+        var serverUrl = REGIONAL_SERVERS[config.region];
+        var savedGatewayId = config.gatewayId || credentials.gatewayId || undefined;
         /*
          * Shared API instance.
          *
@@ -244,11 +246,10 @@ module.exports = function (RED) {
                                  * SomfyCloudNewAuth.login().
                                  */
                                 if (authMethod === 'oauth' && oauthAuth) {
-                                    if (savedGatewayId &&
-                                        oauthAuth.selectedGateway !== savedGatewayId) {
+                                    if (savedGatewayId && oauthAuth.gatewayId !== savedGatewayId) {
                                         oauthAuth.selectGateway(savedGatewayId);
                                     }
-                                    if (!oauthAuth.selectedGateway) {
+                                    if (!oauthAuth.hasSelectedGateway) {
                                         gateways = oauthAuth.availableGateways;
                                         if (gateways.length === 1) {
                                             oauthAuth.selectGateway(gateways[0].gatewayId);
@@ -561,7 +562,7 @@ module.exports = function (RED) {
                      * Return discovered installations when no gateway
                      * has yet been selected.
                      */
-                    if (!gatewayId && !testAuth.selectedGateway) {
+                    if (!gatewayId && !testAuth.hasSelectedGateway) {
                         response.json({
                             success: true,
                             authenticated: true,
@@ -574,7 +575,7 @@ module.exports = function (RED) {
                     if (gatewayId) {
                         testAuth.selectGateway(gatewayId);
                     }
-                    if (!testAuth.selectedGateway) {
+                    if (!testAuth.hasSelectedGateway) {
                         response.json({
                             success: true,
                             authenticated: true,

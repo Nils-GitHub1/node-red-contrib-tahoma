@@ -108,6 +108,21 @@ const isAuthenticationError = (error: unknown): boolean => {
 };
 
 /**
+ * Check whether Somfy reports that the event listener no longer exists.
+ */
+const isMissingEventListenerError = (error: unknown): boolean => {
+  const err = error as {
+    response?: {
+      data?: {
+        error?: string;
+      };
+    };
+  };
+
+  return err?.response?.data?.error === 'No registered event listener';
+};
+
+/**
  * Safely close an API session without masking the original error.
  */
 const safeLogout = (api: SomfyCloudApi): void => {
@@ -494,7 +509,40 @@ export = (RED: nodered.NodeAPI): void => {
                 processExecutionEvent(event);
               }
             } catch (error) {
-              if (isAuthenticationError(error)) {
+              if (isMissingEventListenerError(error)) {
+                RED.log.warn(
+                  '[TaHoma Cloud] Event listener is no longer registered. Registering a new listener.',
+                );
+
+                try {
+                  eventListenerId = await api.registerEventListener();
+
+                  RED.log.info(
+                    '[TaHoma Cloud] Execution event listener successfully re-registered',
+                  );
+                } catch (recoveryError) {
+                  const details = getErrorDetails(recoveryError);
+
+                  RED.log.error(
+                    '[TaHoma Cloud] Event listener recovery failed: ' +
+                      details.message,
+                  );
+
+                  eventListenerId = null;
+
+                  executionWaiters.forEach((waiter) => {
+                    clearTimeout(waiter.timer);
+                    waiter.reject(
+                      new Error(
+                        'Unable to recover Somfy Cloud event monitoring',
+                      ),
+                    );
+                  });
+
+                  executionWaiters.clear();
+                  break;
+                }
+              } else if (isAuthenticationError(error)) {
                 authenticated = false;
                 api.invalidateSession();
 

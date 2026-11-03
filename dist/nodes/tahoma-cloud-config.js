@@ -96,6 +96,14 @@ var isAuthenticationError = function (error) {
     return status === 401 || status === 403;
 };
 /**
+ * Check whether Somfy reports that the event listener no longer exists.
+ */
+var isMissingEventListenerError = function (error) {
+    var _a, _b;
+    var err = error;
+    return ((_b = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.error) === 'No registered event listener';
+};
+/**
  * Safely close an API session without masking the original error.
  */
 var safeLogout = function (api) {
@@ -413,14 +421,14 @@ module.exports = function (RED) {
                 return;
             }
             eventPollingPromise = (function () { return __awaiter(_this, void 0, void 0, function () {
-                var events, _i, events_1, event_1, error_2, recoveryError_1, details, details;
+                var events, _i, events_1, event_1, error_2, recoveryError_1, details, recoveryError_2, details, details;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
-                            if (!(!closing && eventListenerId && api)) return [3 /*break*/, 13];
+                            if (!(!closing && eventListenerId && api)) return [3 /*break*/, 18];
                             _a.label = 1;
                         case 1:
-                            _a.trys.push([1, 3, , 11]);
+                            _a.trys.push([1, 3, , 16]);
                             return [4 /*yield*/, api.fetchEvents(eventListenerId)];
                         case 2:
                             events = _a.sent();
@@ -428,26 +436,50 @@ module.exports = function (RED) {
                                 event_1 = events_1[_i];
                                 processExecutionEvent(event_1);
                             }
-                            return [3 /*break*/, 11];
+                            return [3 /*break*/, 16];
                         case 3:
                             error_2 = _a.sent();
-                            if (!isAuthenticationError(error_2)) return [3 /*break*/, 9];
-                            authenticated = false;
-                            api.invalidateSession();
+                            if (!isMissingEventListenerError(error_2)) return [3 /*break*/, 8];
+                            RED.log.warn('[TaHoma Cloud] Event listener is no longer registered. Registering a new listener.');
                             _a.label = 4;
                         case 4:
-                            _a.trys.push([4, 7, , 8]);
-                            return [4 /*yield*/, ensureAuthenticated()];
-                        case 5:
-                            _a.sent();
+                            _a.trys.push([4, 6, , 7]);
                             return [4 /*yield*/, api.registerEventListener()];
-                        case 6:
+                        case 5:
                             eventListenerId = _a.sent();
-                            RED.log.warn('[TaHoma Cloud] Event listener re-registered after authentication recovery');
-                            return [3 /*break*/, 8];
-                        case 7:
+                            RED.log.info('[TaHoma Cloud] Execution event listener successfully re-registered');
+                            return [3 /*break*/, 7];
+                        case 6:
                             recoveryError_1 = _a.sent();
                             details = getErrorDetails(recoveryError_1);
+                            RED.log.error('[TaHoma Cloud] Event listener recovery failed: ' +
+                                details.message);
+                            eventListenerId = null;
+                            executionWaiters.forEach(function (waiter) {
+                                clearTimeout(waiter.timer);
+                                waiter.reject(new Error('Unable to recover Somfy Cloud event monitoring'));
+                            });
+                            executionWaiters.clear();
+                            return [3 /*break*/, 18];
+                        case 7: return [3 /*break*/, 15];
+                        case 8:
+                            if (!isAuthenticationError(error_2)) return [3 /*break*/, 14];
+                            authenticated = false;
+                            api.invalidateSession();
+                            _a.label = 9;
+                        case 9:
+                            _a.trys.push([9, 12, , 13]);
+                            return [4 /*yield*/, ensureAuthenticated()];
+                        case 10:
+                            _a.sent();
+                            return [4 /*yield*/, api.registerEventListener()];
+                        case 11:
+                            eventListenerId = _a.sent();
+                            RED.log.warn('[TaHoma Cloud] Event listener re-registered after authentication recovery');
+                            return [3 /*break*/, 13];
+                        case 12:
+                            recoveryError_2 = _a.sent();
+                            details = getErrorDetails(recoveryError_2);
                             RED.log.error('[TaHoma Cloud] Event listener recovery failed: ' +
                                 details.message);
                             executionWaiters.forEach(function (waiter) {
@@ -456,18 +488,18 @@ module.exports = function (RED) {
                             });
                             executionWaiters.clear();
                             eventListenerId = null;
-                            return [3 /*break*/, 13];
-                        case 8: return [3 /*break*/, 10];
-                        case 9:
+                            return [3 /*break*/, 18];
+                        case 13: return [3 /*break*/, 15];
+                        case 14:
                             details = getErrorDetails(error_2);
                             RED.log.warn('[TaHoma Cloud] Event polling failed: ' + details.message);
-                            _a.label = 10;
-                        case 10: return [3 /*break*/, 11];
-                        case 11: return [4 /*yield*/, eventPollingDelay(1000)];
-                        case 12:
+                            _a.label = 15;
+                        case 15: return [3 /*break*/, 16];
+                        case 16: return [4 /*yield*/, eventPollingDelay(1000)];
+                        case 17:
                             _a.sent();
                             return [3 /*break*/, 0];
-                        case 13: return [2 /*return*/];
+                        case 18: return [2 /*return*/];
                     }
                 });
             }); })().finally(function () {

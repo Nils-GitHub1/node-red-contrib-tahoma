@@ -56,7 +56,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 var somfy_api_1 = require("../core/somfy-api");
-// ROTATION command: 'setOrientation' works on local API. 'rotation' seems to be legacy command not anymore used ? Modifier to avoid issues with local API according to marekhalmo as mentioned in issue #62 on nikkow/node-red-contrib-tahoma 
+// ROTATION command: 'setOrientation' works on local API. 'rotation' seems to be legacy command not anymore used ? Modifier to avoid issues with local API according to marekhalmo as mentioned in issue #62 on nikkow/node-red-contrib-tahoma
 var TahomaCommands;
 (function (TahomaCommands) {
     TahomaCommands["OPEN"] = "open";
@@ -166,14 +166,10 @@ var waitForMyPosition = function (somfyClient_1, device_1, targetPosition_1, tar
                                 case 0: return [4 /*yield*/, somfyClient.getDeviceStates(device)];
                                 case 1:
                                     states = _b.sent();
-                                    getValue = function (name) {
-                                        var _a;
-                                        return (_a = states.find(function (state) { return state.name.split(':').pop() === name; })) === null || _a === void 0 ? void 0 : _a.value;
-                                    };
+                                    getValue = function (name) { var _a; return (_a = states.find(function (state) { return state.name.split(':').pop() === name; })) === null || _a === void 0 ? void 0 : _a.value; };
                                     position = Number(getValue('ClosureState'));
                                     orientationValue = getValue('SlateOrientationState');
-                                    positionMatches = Number.isFinite(position) &&
-                                        Math.abs(position - targetPosition) <= 1;
+                                    positionMatches = Number.isFinite(position) && Math.abs(position - targetPosition) <= 1;
                                     orientationMatches = targetOrientation === undefined ||
                                         (orientationValue !== undefined &&
                                             orientationValue !== null &&
@@ -247,8 +243,7 @@ function stateMatches(actual, expected) {
     }
     var actualNumber = Number(actual);
     var expectedNumber = Number(expected);
-    if (!Number.isFinite(actualNumber) ||
-        !Number.isFinite(expectedNumber)) {
+    if (!Number.isFinite(actualNumber) || !Number.isFinite(expectedNumber)) {
         return false;
     }
     return Math.abs(actualNumber - expectedNumber) <= 1;
@@ -358,7 +353,7 @@ function generateInstructionsFromPayload(payload) {
                 command: TahomaCommands.SET_CLOSURE_AND_ORIENTATION,
                 expectedState: {
                     position: parseInt(payload.position, 10),
-                    orientation: parseInt(payload.orientation, 10)
+                    orientation: parseInt(payload.orientation, 10),
                 },
                 labels: {
                     done: "Set to position:".concat(payload.position, ", orientation:").concat(payload.orientation),
@@ -471,7 +466,9 @@ module.exports = function (RED) {
                             name: instructions.command,
                             parameters: instructions.parameters || [],
                         };
-                        if (msg.payload.lowspeed && instructions.command !== 'stop' && typeof ((_a = instructions.expectedState) === null || _a === void 0 ? void 0 : _a.position) === 'number') {
+                        if (msg.payload.lowspeed &&
+                            instructions.command !== 'stop' &&
+                            typeof ((_a = instructions.expectedState) === null || _a === void 0 ? void 0 : _a.position) === 'number') {
                             targetPosition = instructions.expectedState.position || 0;
                             command.name = 'position_low_speed';
                             command.parameters = [targetPosition];

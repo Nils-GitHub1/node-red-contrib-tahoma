@@ -22,7 +22,8 @@ export = (RED: nodered.NodeAPI) => {
             this.send(msg);
           })
           .catch((error) => {
-            const message = error instanceof Error ? error.message : String(error);
+            const message =
+              error instanceof Error ? error.message : String(error);
             this.status({
               fill: 'red',
               shape: 'ring',

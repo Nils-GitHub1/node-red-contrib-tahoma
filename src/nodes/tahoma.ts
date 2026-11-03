@@ -18,7 +18,7 @@ interface ITahomaControlPayload {
   repetitions: string;
 }
 
-// ROTATION command: 'setOrientation' works on local API. 'rotation' seems to be legacy command not anymore used ? Modifier to avoid issues with local API according to marekhalmo as mentioned in issue #62 on nikkow/node-red-contrib-tahoma 
+// ROTATION command: 'setOrientation' works on local API. 'rotation' seems to be legacy command not anymore used ? Modifier to avoid issues with local API according to marekhalmo as mentioned in issue #62 on nikkow/node-red-contrib-tahoma
 enum TahomaCommands {
   OPEN = 'open',
   CLOSE = 'close',
@@ -38,12 +38,12 @@ enum TahomaCommands {
 interface ITahomaControlInstructions {
   command: TahomaCommands;
   parameters?: number[];
-  expectedState?: { 
-    open?: boolean; 
-    position?: number; 
-    orientation?: number; 
-    onOff?: string; 
-    intensity?: number; 
+  expectedState?: {
+    open?: boolean;
+    position?: number;
+    orientation?: number;
+    onOff?: string;
+    intensity?: number;
     repetitions?: number;
     movingState?: boolean;
   };
@@ -82,81 +82,74 @@ const continueWhenCompleted = async (
       return;
     }
   }
-  throw new Error('Timed out waiting for TaHoma command execution',);
+  throw new Error('Timed out waiting for TaHoma command execution');
 };
 
 const waitForStopped = async (
-    somfyClient: SomfyApi,
-    device: string,
-    timeoutMs = 30000,
+  somfyClient: SomfyApi,
+  device: string,
+  timeoutMs = 30000,
 ): Promise<void> => {
-    const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + timeoutMs;
 
-    while (Date.now() < deadline) {
-        const states = await somfyClient.getDeviceStates(device);
+  while (Date.now() < deadline) {
+    const states = await somfyClient.getDeviceStates(device);
 
-        const movingState = states.find(
-            state => state.name.split(':').pop() === 'MovingState',
-        )?.value;
+    const movingState = states.find(
+      (state) => state.name.split(':').pop() === 'MovingState',
+    )?.value;
 
-        const moving = parseDeviceBoolean(movingState);
+    const moving = parseDeviceBoolean(movingState);
 
-        if (moving === false) {
-          return;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 2500));
+    if (moving === false) {
+      return;
     }
 
-    throw new Error('Timed out waiting for the blind to stop moving');
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+
+  throw new Error('Timed out waiting for the blind to stop moving');
 };
 
 const waitForMyPosition = async (
-    somfyClient: SomfyApi,
-    device: string,
-    targetPosition: number,
-    targetOrientation?: number,
-    timeoutMs = 120000,
+  somfyClient: SomfyApi,
+  device: string,
+  targetPosition: number,
+  targetOrientation?: number,
+  timeoutMs = 120000,
 ): Promise<void> => {
-    const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + timeoutMs;
 
-    while (Date.now() < deadline) {
-        const states = await somfyClient.getDeviceStates(device);
+  while (Date.now() < deadline) {
+    const states = await somfyClient.getDeviceStates(device);
 
-        const getValue = (name: string): unknown =>
-            states.find(
-                state => state.name.split(':').pop() === name,
-            )?.value;
+    const getValue = (name: string): unknown =>
+      states.find((state) => state.name.split(':').pop() === name)?.value;
 
-        const position = Number(getValue('ClosureState'));
-        const orientationValue = getValue('SlateOrientationState');
+    const position = Number(getValue('ClosureState'));
+    const orientationValue = getValue('SlateOrientationState');
 
-        const positionMatches =
-            Number.isFinite(position) &&
-            Math.abs(position - targetPosition) <= 1;
+    const positionMatches =
+      Number.isFinite(position) && Math.abs(position - targetPosition) <= 1;
 
-        const orientationMatches =
-            targetOrientation === undefined ||
-            (
-                orientationValue !== undefined &&
-                orientationValue !== null &&
-                Number.isFinite(Number(orientationValue)) &&
-                Math.abs(Number(orientationValue) - targetOrientation) <= 1
-            );
+    const orientationMatches =
+      targetOrientation === undefined ||
+      (orientationValue !== undefined &&
+        orientationValue !== null &&
+        Number.isFinite(Number(orientationValue)) &&
+        Math.abs(Number(orientationValue) - targetOrientation) <= 1);
 
-        const movingValue = getValue('MovingState');
-        const moving = parseDeviceBoolean(movingValue) === false;
+    const movingValue = getValue('MovingState');
+    const moving = parseDeviceBoolean(movingValue) === false;
 
-        if (positionMatches && orientationMatches && moving) {
-            return;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 2500));
+    if (positionMatches && orientationMatches && moving) {
+      return;
     }
 
-    throw new Error(
-        'Timed out waiting for the blind to reach its My position',
-    );
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+
+  throw new Error('Timed out waiting for the blind to reach its My position');
 };
 
 export = (RED: nodered.NodeAPI) => {
@@ -182,7 +175,11 @@ export = (RED: nodered.NodeAPI) => {
             parameters: instructions.parameters || [],
           };
 
-          if (msg.payload.lowspeed && instructions.command !== 'stop' &&   typeof instructions.expectedState?.position === 'number') {
+          if (
+            msg.payload.lowspeed &&
+            instructions.command !== 'stop' &&
+            typeof instructions.expectedState?.position === 'number'
+          ) {
             const targetPosition = instructions.expectedState.position || 0;
             command.name = 'position_low_speed';
             command.parameters = [targetPosition];
@@ -202,16 +199,13 @@ export = (RED: nodered.NodeAPI) => {
 
           let myTargetPosition: number | undefined;
           let myTargetOrientation: number | undefined;
-          
+
           if (instructions.command === TahomaCommands.MY) {
-            const states = await somfyApiClient.getDeviceStates(
-              this['device'],
-            );
+            const states = await somfyApiClient.getDeviceStates(this['device']);
 
             const getValue = (name: string): unknown =>
-              states.find(
-                state => state.name.split(':').pop() === name,
-              )?.value;
+              states.find((state) => state.name.split(':').pop() === name)
+                ?.value;
 
             const positionValue = getValue('Memorized1PositionState');
             const position = Number(positionValue);
@@ -221,9 +215,7 @@ export = (RED: nodered.NodeAPI) => {
               positionValue === null ||
               !Number.isFinite(position)
             ) {
-              throw new Error(
-                'Memorized1PositionState is unavailable',
-              );
+              throw new Error('Memorized1PositionState is unavailable');
             }
 
             myTargetPosition = position;
@@ -243,7 +235,7 @@ export = (RED: nodered.NodeAPI) => {
               ...(myTargetOrientation !== undefined
                 ? { orientation: myTargetOrientation }
                 : {}),
-              };
+            };
           }
 
           const commandExecutionResponse: ICommandExecutionResponse =
@@ -267,10 +259,7 @@ export = (RED: nodered.NodeAPI) => {
                 myTargetOrientation,
               );
             } else if (instructions.command === TahomaCommands.STOP) {
-              await waitForStopped(
-                somfyApiClient,
-                this['device'],
-              );
+              await waitForStopped(somfyApiClient, this['device']);
             } else {
               await waitForExpectedDeviceState(
                 somfyApiClient,
@@ -279,7 +268,7 @@ export = (RED: nodered.NodeAPI) => {
               );
             }
           }
-        
+
           this.status({
             fill: 'green',
             shape: 'dot',
@@ -306,13 +295,13 @@ export = (RED: nodered.NodeAPI) => {
 
 function getBoolean(value: any): boolean {
   switch (String(value).toLowerCase()) {
-    case 'true': 
-    case '1': 
-    case 'on': 
-    case 'yes': 
-      return true; 
+    case 'true':
+    case '1':
+    case 'on':
+    case 'yes':
+      return true;
   }
-  return false; 
+  return false;
 }
 
 type TahomaDeviceState = {
@@ -320,13 +309,8 @@ type TahomaDeviceState = {
   value: unknown;
 };
 
-function getStateValue(
-  states: TahomaDeviceState[],
-  name: string,
-): unknown {
-  return states.find(
-    (state) => state.name.split(':').pop() === name,
-  )?.value;
+function getStateValue(states: TahomaDeviceState[], name: string): unknown {
+  return states.find((state) => state.name.split(':').pop() === name)?.value;
 }
 
 function parseDeviceBoolean(value: unknown): boolean | undefined {
@@ -351,32 +335,26 @@ function parseDeviceBoolean(value: unknown): boolean | undefined {
   }
 }
 
-function stateMatches(
-    actual: unknown,
-    expected: unknown,
-): boolean {
-    if (typeof expected === 'boolean') {
-        return parseDeviceBoolean(actual) === expected;
-    }
+function stateMatches(actual: unknown, expected: unknown): boolean {
+  if (typeof expected === 'boolean') {
+    return parseDeviceBoolean(actual) === expected;
+  }
 
-    if (actual === undefined || actual === null) {
+  if (actual === undefined || actual === null) {
     return false;
   }
 
   const actualNumber = Number(actual);
   const expectedNumber = Number(expected);
 
-  if (
-    !Number.isFinite(actualNumber) ||
-    !Number.isFinite(expectedNumber)
-  ) {
+  if (!Number.isFinite(actualNumber) || !Number.isFinite(expectedNumber)) {
     return false;
   }
 
   return Math.abs(actualNumber - expectedNumber) <= 1;
 }
 
-function wait(milliseconds: number,): Promise<void> {
+function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
@@ -472,9 +450,9 @@ function generateInstructionsFromPayload(
     case 'customClosureAndOrientation':
       return {
         command: TahomaCommands.SET_CLOSURE_AND_ORIENTATION,
-        expectedState: { 
-          position: parseInt(payload.position, 10), 
-          orientation: parseInt(payload.orientation, 10)
+        expectedState: {
+          position: parseInt(payload.position, 10),
+          orientation: parseInt(payload.orientation, 10),
         },
         labels: {
           done: `Set to position:${payload.position}, orientation:${payload.orientation}`,

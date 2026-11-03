@@ -1,0 +1,67 @@
+
+<script type="text/javascript">
+  RED.nodes.registerType('tahoma-scenarios', {
+    category: 'function',
+    color: '#E2D96E',
+    defaults: {
+      cloudConfig: {
+        value: '',
+        type: 'tahoma-cloud-config',
+        required: true,
+      },
+      name: { value: '' },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'bridge-dash.png',
+    label: function () {
+      return this.name || 'TaHoma Scenarios';
+    },
+    labelStyle: function () {
+      return this.name ? 'node_label_italic' : '';
+    },
+  });
+</script>
+
+<script type="text/x-red" data-template-name="tahoma-scenarios">
+  <div class="form-row">
+    <label for="node-input-name">
+      <i class="icon-tag"></i> Name
+    </label>
+    <input type="text" id="node-input-name">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-cloudConfig">
+      <i class="icon-tag"></i> TaHoma Cloud
+    </label>
+    <input type="text" id="node-input-cloudConfig">
+  </div>
+</script>
+
+<script type="text/x-red" data-help-name="tahoma-scenarios">
+  <p>Retrieves existing scenarios from your Somfy TaHoma Cloud account.</p>
+
+  <h3>Inputs</h3>
+  <p>Any incoming message triggers a refresh of the scenario list.</p>
+
+  <h3>Outputs</h3>
+  <p>
+    <code>msg.payload</code> contains an array of existing scenarios.
+  </p>
+
+  <p>Each scenario contains:</p>
+  <ul>
+    <li><code>id</code>: Scenario identifier</li>
+    <li><code>name</code>: Scenario name</li>
+    <li><code>oid</code>: Original Somfy identifier</li>
+    <li><code>label</code>: Original Somfy label</li>
+  </ul>
+
+  <h3>Important</h3>
+  <p>
+    This node only retrieves scenarios already created through
+    the official Somfy TaHoma application.
+    It does not create, modify or delete scenarios.
+  </p>
+</script>

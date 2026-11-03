@@ -199,3 +199,25 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+=======================================================================
+
+Third-Party Software
+
+This project contains an implementation of the Somfy OAuth authentication mechanism adapted from the following third-party project:
+
+python-overkiz-api
+
+Copyright (c) 2020 Mick Vleeshouwer
+
+Original repository: https://github.com/iMicknl/python-overkiz-api
+
+Original license: MIT License
+
+The original Python implementation was used as a reference and source for the analysis and development of the JavaScript OAuth implementation in this project.
+
+The adapted portions remain subject to the original MIT License. The complete original MIT License is included in THIRD-PARTY-LICENSES/pyoverkiz-MIT.txt.
+
+All other original project code remains licensed under Apache License 2.0.
+
+=======================================================================

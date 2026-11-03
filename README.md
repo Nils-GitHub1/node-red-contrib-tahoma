@@ -4,15 +4,47 @@
 
 # Somfy Tahoma for Node-RED
 
-Fork of Nikkhow (Nicolas Nunge) package, with merge of @packyr and @blondak forks. With some clean-up, adds (Europe/America/Oceania Somfy server choice for API token generation) and removal (watson/bonjour outdated package as dependency which implied some security vulnerability).
+Since version **3.3.2**, this package supports two complementary ways to interact with your Somfy TaHoma installation.
 
-## Important Note for users of legacy v2.x and v1.x of Nikkhow versions (and potentially other forks)
+## Two ways to control your Somfy devices
 
+### 1. Local device control – TaHoma Local API
+
+Control your Somfy devices directly from Node-RED through your local TaHoma box.
+
+- Direct communication between Node-RED and your TaHoma box.
+- No dependency on Somfy Cloud for normal device control.
+- No cloud API quotas or OAuth token management.
+- Requires Node-RED and your TaHoma box to be connected to the same local network.
+- Requires activation of Somfy Developer Mode.
+
+### 2. Cloud scenario control – Somfy OAuth
+
+Retrieve and execute scenarios that you have created using the Somfy mobile application or Somfy Cloud.
+
+- Uses the new Somfy OAuth authentication mechanism.
+- Automatically manages access tokens and refresh tokens.
+- Supports installation discovery and gateway selection.
+- Allows you to execute your existing Somfy scenarios directly from Node-RED.
+- Requires an internet connection and access to Somfy Cloud.
+
+**Both operating modes can be used simultaneously.** You can control individual devices locally while also executing scenarios through Somfy Cloud.
+
+Obviously, each approach has its advantages and limitations. Local control avoids cloud dependency, while Cloud scenario control gives you access to the scenarios already configured in your Somfy environment.
+
+The choice is yours, depending on your requirements, including risks related to lost of internet access.
+
+### Which Somfy account should I use?
+
+For Cloud scenario control, you can use your existing Somfy account, however creating a separate account through the Somfy mobile application is recommended.
+
+If you create a separate account, make sure it has the appropriate permissions to access and execute scenarios. The Resident role is recommended; Guest permissions are not sufficient.
+
+
+### Origin and History
+
+Fork of Nikkhow (Nicolas Nunge) package, with merge of @packyr and @blondak forks. With some clean-up, adds (Europe/America/Oceania Somfy server choice for API token generation) and removal (watson/bonjour outdated package as dependency which implied some security vulnerability). Important Note for users of legacy v2.x and v1.x of Nikkhow versions (and potentially other forks)
 This 3rd version implements a new API released by Somfy (yes, another one). This time, it no longer relies on any cloud-based API, but will directly discuss with your local Tahoma box.
-
-#### What does this mean?
-
-Basically, the only requirement is to host the node-red instance on the same network than your Tahoma box. That's all. No more quotas, no more expiring tokens. Good news, isn't it?
 
 #### How to upgrade?
 
@@ -87,6 +119,96 @@ This node will ignore all data provided as input. You can specify the desired de
 #### Output
 
 The node will output its original `msg.payload` enriched with the selected device information. The fields returned are the raw information sent by the Tahoma box.
+
+### Node `tahoma-scenarios`
+
+This node retrieves the list of scenarios available in your Somfy account through the Somfy Cloud API.
+
+The scenarios are those previously created using the Somfy mobile application or Somfy Cloud.
+
+**Configuration:**
+
+- Select the Tahoma Configuration node associated with your Somfy account.
+- Configure the authentication method to use Somfy OAuth.
+- Select the appropriate Somfy installation/gateway when prompted.
+
+**How it works:**
+
+- At Node-RED startup, the configuration node authenticates with Somfy Cloud and retrieves the available scenarios.
+- The scenarios are cached by the configuration node to avoid unnecessary API requests.
+- The node can retrieve the available scenarios from this cache.
+- A refresh operation allows the scenario list to be retrieved again from Somfy Cloud.
+
+This node is useful when you want to retrieve the available scenarios dynamically, for example to populate a dashboard, create a selection list or build automated flows.
+
+### Node `tahoma-scenario-control`
+
+This node allows you to execute scenarios that have already been created in your Somfy mobile application or Somfy Cloud account.
+
+Instead of controlling individual devices through the local TaHoma API, this node triggers an existing Somfy scenario through Somfy Cloud.
+
+**Configuration:**
+
+- Select the Tahoma Configuration node associated with your Somfy account.
+- Configure the authentication method to use Somfy OAuth.
+- Select the appropriate Somfy installation/gateway.
+
+**Input:**
+
+If "Use msg.payload.scenarioId (Dynamic)" is selected as Scenario in the node, the node expects a scenario ID to identify the scenario to execute.
+The scenario ID can be obtained using the `tahoma-scenarios` node.
+
+Else if a specific scenario is selected in the node, any input will trigger the action.
+
+**How it works:**
+
+- The node uses the authentication session managed by its associated Tahoma Configuration node.
+- OAuth access tokens are refreshed automatically when necessary.
+- Updated OAuth session credentials are persisted by Node-RED.
+- The selected scenario is executed through Somfy Cloud.
+- The execution result is returned in the output message.
+
+**Important:** Scenario execution is not automatically retried if an authentication error occurs. This is intentional to avoid accidentally executing the same scenario more than once.
+
+### Somfy Cloud authentication (OAuth)
+
+The new Cloud nodes use the Somfy OAuth authentication mechanism, adapted from the Python Overkiz API implementation.
+
+The Tahoma Configuration node supports the following authentication methods:
+
+- **OAuth (recommended for Cloud):** Uses the new Somfy authentication mechanism with access-token and refresh-token management.
+- **Legacy:** Retains the previous authentication method where supported.
+
+When using OAuth:
+
+- Your Somfy email and password are used for the initial authentication.
+- OAuth refresh tokens are used to maintain the session.
+- Credentials and session information are stored using Node-RED's encrypted credential storage.
+- The selected installation and gateway are associated with the stored OAuth session.
+
+Each Tahoma Configuration node maintains its own independent authentication session and scenario cache.
+
+You can therefore configure multiple Tahoma Configuration nodes using different Somfy accounts, even if those accounts access the same Somfy installation.
+
+Multiple Cloud nodes can share the same Tahoma Configuration node and reuse its authentication session and scenario cache.
+
+**Authentication architecture**
+The implementation follows this sequence:
+
+Somfy username and password
+          |
+Somfy Accounts OAuth token
+          |
+Ginaite token exchange
+          |
+BOB API: installation discovery
+          |
+Gateway selection and site-scoped token
+          |
+TaHoma API requests
+
+This distinction is important because the BOB API needs an account-wide token, whereas the TaHoma API needs a token scoped to the selected installation.
+The code explicitly handles those two scopes.
 
 ## Example flow
 

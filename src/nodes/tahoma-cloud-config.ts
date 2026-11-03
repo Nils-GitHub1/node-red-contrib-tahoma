@@ -689,6 +689,39 @@ export = (RED: nodered.NodeAPI): void => {
 
         testApi = new SomfyCloudApi(testAuth);
 
+        /*
+         * Persist OAuth session changes made during connection testing.
+         *
+         * An existing configuration node can save rotated refresh
+         * tokens immediately. A new, not-yet-deployed configuration
+         * uses a temporary test session and saves credentials when
+         * the configuration is deployed.
+         */
+        testAuth.setTokenRefreshCallback(
+          async (session: ISomfyTokenState): Promise<void> => {
+            if (!configNodeId || !configNode) {
+              return;
+            }
+
+            const credentialsToPersist: ExtendedCredentials = {
+              ...(storedCredentials || {}),
+              userId: userId || '',
+              userPassword: userPassword || '',
+            };
+
+            persistOAuthCredentials(
+              RED,
+              configNodeId,
+              credentialsToPersist,
+              session,
+            );
+
+            RED.log.info(
+              '[TaHoma Cloud Test] OAuth session credentials updated',
+            );
+          },
+        );
+
         await testApi.login();
 
         authenticated = true;

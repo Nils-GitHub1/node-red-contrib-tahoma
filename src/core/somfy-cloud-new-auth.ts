@@ -1007,11 +1007,7 @@ export class SomfyCloudNewAuth {
    * The access token is deliberately never persisted.
    */
   public toCredentials(): ISomfyTokenState {
-    const session = this.getSession();
-
-    this.persistedSessionKey = this.sessionKey(session);
-
-    return session;
+    return this.getSession();
   }
 
   /* ---------------------------------------------------------------------- */

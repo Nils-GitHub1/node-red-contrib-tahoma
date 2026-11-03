@@ -911,9 +911,7 @@ var SomfyCloudNewAuth = /** @class */ (function () {
      * The access token is deliberately never persisted.
      */
     SomfyCloudNewAuth.prototype.toCredentials = function () {
-        var session = this.getSession();
-        this.persistedSessionKey = this.sessionKey(session);
-        return session;
+        return this.getSession();
     };
     /* ---------------------------------------------------------------------- */
     /* Authentication headers                                                */

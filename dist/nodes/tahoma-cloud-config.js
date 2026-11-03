@@ -1,4 +1,15 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -583,6 +594,26 @@ module.exports = function (RED) {
                         region: storedCredentials === null || storedCredentials === void 0 ? void 0 : storedCredentials.oauthRegion,
                     });
                     testApi = new somfy_cloud_api_1.SomfyCloudApi(testAuth);
+                    /*
+                     * Persist OAuth session changes made during connection testing.
+                     *
+                     * An existing configuration node can save rotated refresh
+                     * tokens immediately. A new, not-yet-deployed configuration
+                     * uses a temporary test session and saves credentials when
+                     * the configuration is deployed.
+                     */
+                    testAuth.setTokenRefreshCallback(function (session) { return __awaiter(void 0, void 0, void 0, function () {
+                        var credentialsToPersist;
+                        return __generator(this, function (_a) {
+                            if (!configNodeId || !configNode) {
+                                return [2 /*return*/];
+                            }
+                            credentialsToPersist = __assign(__assign({}, (storedCredentials || {})), { userId: userId || '', userPassword: userPassword || '' });
+                            persistOAuthCredentials(RED, configNodeId, credentialsToPersist, session);
+                            RED.log.info('[TaHoma Cloud Test] OAuth session credentials updated');
+                            return [2 /*return*/];
+                        });
+                    }); });
                     return [4 /*yield*/, testApi.login()];
                 case 2:
                     _a.sent();

@@ -1,0 +1,14 @@
+
+# Development and repository files
+.github/
+.travis.yml
+.gitattributes
+
+# Development tooling
+.eslintrc.js
+.prettierrc
+tsconfig.json
+tslint.json
+
+# TypeScript source (compiled files are published in dist/)
+src/

@@ -18,6 +18,7 @@ export = (RED: nodered.NodeAPI): void => {
       this['name'] = props.name;
       this['cloudConfig'] = props.cloudConfig;
       this['scenarioId'] = props.scenarioId;
+      this['timeout'] = props.timeout ?? 300;
 
       const node = this as nodered.Node & {
         on: (
@@ -34,8 +35,21 @@ export = (RED: nodered.NodeAPI): void => {
             throw new Error('TaHoma Cloud configuration not found');
           }
 
+          const getScenarioById = configNode['getScenarioById'] as
+            | ((
+                id: string,
+              ) => Promise<{ id: string; name: string } | undefined>)
+            | undefined;
+
+          if (!getScenarioById) {
+            throw new Error('TaHoma Cloud scenario lookup is unavailable');
+          }
+
           const executeScenario = configNode['executeScenario'] as
-            | ((scenarioId: string) => Promise<{ execId: string }>)
+            | ((
+                scenarioId: string,
+                timeoutSeconds?: number,
+              ) => Promise<{ execId: string }>)
             | undefined;
 
           if (!executeScenario) {
@@ -59,23 +73,42 @@ export = (RED: nodered.NodeAPI): void => {
             );
           }
 
+          if (!getScenarioById) {
+            throw new Error('TaHoma Cloud scenario lookup is unavailable');
+          }
+
+          const scenario = await getScenarioById(scenarioId);
+          const scenarioName = scenario?.name;
+          const timeoutSeconds = Number(this['timeout'] ?? 300);
+
+          if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 0) {
+            throw new Error('Scenario timeout must be a non-negative number');
+          }
+
           this.status({
             fill: 'yellow',
             shape: 'dot',
-            text: 'Executing scenario...',
+            text:
+              timeoutSeconds > 0
+                ? 'Executing and waiting for scenario...'
+                : 'Executing scenario...',
           });
 
-          const execution = await executeScenario(scenarioId);
+          const execution = await executeScenario(scenarioId, timeoutSeconds);
 
           msg.payload = {
             scenarioId,
             execId: execution.execId,
+            name: scenarioName,
           };
 
           this.status({
             fill: 'green',
             shape: 'dot',
-            text: 'Scenario execution requested',
+            text:
+              timeoutSeconds > 0
+                ? 'Scenario completed'
+                : 'Scenario execution requested',
           });
 
           this.send(msg);

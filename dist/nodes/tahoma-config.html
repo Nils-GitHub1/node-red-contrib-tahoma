@@ -126,8 +126,12 @@
     <input type="checkbox" id="node-config-input-acceptUntrustedCertificates">
     <p>
       <i>
-        Note: Tahoma boxes use an Overkiz certificate not trusted by default on some OS. When enabled, this option disables certificate verification for connections
-        to the local TaHoma box only (so use it only on a trusted local network). The connections to the Somfy cloud are not impacted.
+        Note: Tahoma boxes use an Overkiz certificate not trusted by default on most OS.
+        To keep certificate validation, add the following authority to your HTTPS client trust store:
+        https://ca.overkiz.com/overkiz-root-ca-2048.crt
+        Else enable this option to disable certificate verification for connections
+        to the local TaHoma box (so use it only on a trusted local network).
+        The connections to the Somfy cloud are not impacted by this option.
       </i>
     </p>
   </div>

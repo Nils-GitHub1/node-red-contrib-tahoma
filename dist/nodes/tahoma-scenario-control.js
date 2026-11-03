@@ -38,20 +38,27 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 module.exports = function (RED) {
     RED.nodes.registerType('tahoma-scenario-control', function (props) {
         var _this = this;
+        var _a;
         RED.nodes.createNode(this, props);
         this['name'] = props.name;
         this['cloudConfig'] = props.cloudConfig;
         this['scenarioId'] = props.scenarioId;
+        this['timeout'] = (_a = props.timeout) !== null && _a !== void 0 ? _a : 300;
         var node = this;
         node.on('input', function (msg) { return __awaiter(_this, void 0, void 0, function () {
-            var configNode, executeScenario, payload, scenarioId, execution, error_1, message;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var configNode, getScenarioById, executeScenario, payload, scenarioId, scenario, scenarioName, timeoutSeconds, execution, error_1, message;
+            var _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
-                        _a.trys.push([0, 2, , 3]);
+                        _b.trys.push([0, 3, , 4]);
                         configNode = RED.nodes.getNode(this['cloudConfig']);
                         if (!configNode) {
                             throw new Error('TaHoma Cloud configuration not found');
+                        }
+                        getScenarioById = configNode['getScenarioById'];
+                        if (!getScenarioById) {
+                            throw new Error('TaHoma Cloud scenario lookup is unavailable');
                         }
                         executeScenario = configNode['executeScenario'];
                         if (!executeScenario) {
@@ -66,27 +73,43 @@ module.exports = function (RED) {
                         if (!scenarioId || typeof scenarioId !== 'string') {
                             throw new Error('No scenario selected. Configure a scenario or provide msg.payload.scenarioId');
                         }
+                        if (!getScenarioById) {
+                            throw new Error('TaHoma Cloud scenario lookup is unavailable');
+                        }
+                        return [4 /*yield*/, getScenarioById(scenarioId)];
+                    case 1:
+                        scenario = _b.sent();
+                        scenarioName = scenario === null || scenario === void 0 ? void 0 : scenario.name;
+                        timeoutSeconds = Number((_a = this['timeout']) !== null && _a !== void 0 ? _a : 300);
+                        if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 0) {
+                            throw new Error('Scenario timeout must be a non-negative number');
+                        }
                         this.status({
                             fill: 'yellow',
                             shape: 'dot',
-                            text: 'Executing scenario...',
+                            text: timeoutSeconds > 0
+                                ? 'Executing and waiting for scenario...'
+                                : 'Executing scenario...',
                         });
-                        return [4 /*yield*/, executeScenario(scenarioId)];
-                    case 1:
-                        execution = _a.sent();
+                        return [4 /*yield*/, executeScenario(scenarioId, timeoutSeconds)];
+                    case 2:
+                        execution = _b.sent();
                         msg.payload = {
                             scenarioId: scenarioId,
                             execId: execution.execId,
+                            name: scenarioName,
                         };
                         this.status({
                             fill: 'green',
                             shape: 'dot',
-                            text: 'Scenario execution requested',
+                            text: timeoutSeconds > 0
+                                ? 'Scenario completed'
+                                : 'Scenario execution requested',
                         });
                         this.send(msg);
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_1 = _a.sent();
+                        return [3 /*break*/, 4];
+                    case 3:
+                        error_1 = _b.sent();
                         message = error_1 instanceof Error ? error_1.message : String(error_1);
                         this.status({
                             fill: 'red',
@@ -94,8 +117,8 @@ module.exports = function (RED) {
                             text: 'Scenario execution failed',
                         });
                         this.error("TaHoma scenario error: ".concat(message), msg);
-                        return [3 /*break*/, 3];
-                    case 3: return [2 /*return*/];
+                        return [3 /*break*/, 4];
+                    case 4: return [2 /*return*/];
                 }
             });
         }); });

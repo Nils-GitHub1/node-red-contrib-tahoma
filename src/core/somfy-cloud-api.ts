@@ -14,6 +14,19 @@ export interface ISomfyExecutionResponse {
   execId: string;
 }
 
+export interface ISomfyEvent {
+  name: string;
+  execId?: string;
+  newState?: string;
+  oldState?: string;
+  failureType?: string;
+  failedCommands?: unknown[];
+}
+
+export interface ISomfyEventListenerResponse {
+  id: string;
+}
+
 export class SomfyCloudApi {
   private readonly authMethod: SomfyCloudAuthMethod;
 
@@ -225,6 +238,56 @@ export class SomfyCloudApi {
     }
 
     return response.data as ISomfyExecutionResponse;
+  }
+
+  /**
+   * Register a Somfy Cloud event listener.
+   */
+  public async registerEventListener(): Promise<string> {
+    const response = await this.request({
+      url: `${this.getEndpoint()}events/register`,
+      method: 'POST',
+    });
+
+    if (!response.data || typeof response.data.id !== 'string') {
+      throw new Error('Invalid event listener response from Somfy Cloud');
+    }
+
+    return response.data.id;
+  }
+
+  /**
+   * Fetch events from a registered listener.
+   */
+  public async fetchEvents(listenerId: string): Promise<ISomfyEvent[]> {
+    if (!listenerId) {
+      throw new Error('Event listener ID is required');
+    }
+
+    const response = await this.request({
+      url: `${this.getEndpoint()}events/${encodeURIComponent(listenerId)}/fetch`,
+      method: 'POST',
+    });
+
+    if (!Array.isArray(response.data)) {
+      throw new Error('Invalid events response from Somfy Cloud');
+    }
+
+    return response.data as ISomfyEvent[];
+  }
+
+  /**
+   * Unregister a Somfy Cloud event listener.
+   */
+  public async unregisterEventListener(listenerId: string): Promise<void> {
+    if (!listenerId) {
+      return;
+    }
+
+    await this.request({
+      url: `${this.getEndpoint()}events/${encodeURIComponent(listenerId)}/unregister`,
+      method: 'POST',
+    });
   }
 
   /**

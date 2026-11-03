@@ -16,7 +16,7 @@ Control your Somfy devices directly from Node-RED through your local TaHoma box.
 - No dependency on Somfy Cloud for normal device control.
 - No cloud API quotas or OAuth token management.
 - Requires Node-RED and your TaHoma box to be connected to the same local network.
-- Requires activation of Somfy Developer Mode.
+- Requires activation of Somfy Developer Mode. This [guide](https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode) will walk you through this process.
 
 ### 2. Cloud scenario control – Somfy OAuth
 
@@ -44,7 +44,9 @@ If you create a separate account, make sure it has the appropriate permissions t
 ### Origin and History
 
 Fork of Nikkhow (Nicolas Nunge) package, with merge of @packyr and @blondak forks. With some clean-up, adds (Europe/America/Oceania Somfy server choice for API token generation) and removal (watson/bonjour outdated package as dependency which implied some security vulnerability). Important Note for users of legacy v2.x and v1.x of Nikkhow versions (and potentially other forks)
-This 3rd version implements a new API released by Somfy (yes, another one). This time, it no longer relies on any cloud-based API, but will directly discuss with your local Tahoma box.
+This 3rd version implements a new API released by Somfy (yes, another one). This time, the local device control nodes no longer relies on any cloud-based API, but will directly discuss with your local Tahoma box.
+The cloud scenario control code / nodes introduced in release 3.3.2 implement the Somfy OAuth authentication mechanism adapted from the python-overkiz-api,
+copyright (c) 2020 Mick Vleeshouwer, original repository: https://github.com/iMicknl/python-overkiz-api.
 
 #### How to upgrade?
 

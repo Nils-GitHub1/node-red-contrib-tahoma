@@ -1,5 +1,5 @@
 import * as nodered from 'node-red';
-import { SomfyCloudApi } from '../core/somfy-cloud-api';
+import { SomfyCloudApi, ISomfyEvent } from '../core/somfy-cloud-api';
 import {
   SomfyCloudNewAuth,
   ISomfyTokenState,
@@ -16,6 +16,12 @@ const REGIONAL_SERVERS: Record<string, string> = {
 interface TahomaScenario {
   id: string;
   name: string;
+}
+
+interface ISomfyExecutionWaiter {
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 interface ExtendedCredentials {
@@ -243,6 +249,15 @@ export = (RED: nodered.NodeAPI): void => {
       let scenariosPromise: Promise<TahomaScenario[]> | null = null;
 
       /*
+       * Shared scenario execution event monitoring.
+       */
+      let eventListenerId: string | null = null;
+      let eventListenerPromise: Promise<void> | null = null;
+      let eventPollingPromise: Promise<void> | null = null;
+      const executionWaiters = new Map<string, ISomfyExecutionWaiter>();
+      const terminalExecutionEvents = new Map<string, ISomfyEvent>();
+
+      /*
        * Authentication initialization.
        */
       if (authMethod === 'oauth') {
@@ -369,6 +384,211 @@ export = (RED: nodered.NodeAPI): void => {
       };
 
       /**
+       * Small delay between event polling requests.
+       */
+      const eventPollingDelay = (milliseconds: number): Promise<void> =>
+        new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      /**
+       * Process execution state events.
+       */
+      const processExecutionEvent = (event: ISomfyEvent): void => {
+        if (
+          event.name !== 'ExecutionStateChangedEvent' ||
+          !event.execId ||
+          (event.newState !== 'COMPLETED' && event.newState !== 'FAILED')
+        ) {
+          return;
+        }
+
+        const waiter = executionWaiters.get(event.execId);
+
+        if (waiter) {
+          clearTimeout(waiter.timer);
+          executionWaiters.delete(event.execId);
+
+          if (event.newState === 'FAILED') {
+            waiter.reject(
+              new Error(
+                `Scenario execution failed. ` +
+                  `Execution ID: ${event.execId}. ` +
+                  `Failure: ${event.failureType || 'Unknown'}`,
+              ),
+            );
+          } else {
+            waiter.resolve();
+          }
+
+          return;
+        }
+
+        /*
+         * Retain terminal events that arrive before their
+         * corresponding execution waiter is registered.
+         */
+        terminalExecutionEvents.set(event.execId, event);
+
+        /*
+         * Keep the event buffer bounded.
+         */
+        if (terminalExecutionEvents.size > 100) {
+          const oldestEventId = terminalExecutionEvents.keys().next().value;
+
+          if (oldestEventId) {
+            terminalExecutionEvents.delete(oldestEventId);
+          }
+        }
+      };
+
+      /**
+       * Register the shared event listener.
+       *
+       * Only one listener is registered per Cloud configuration.
+       */
+      const ensureEventListener = async (): Promise<void> => {
+        if (!api) {
+          throw new Error('Cloud credentials are unavailable');
+        }
+
+        await ensureAuthenticated();
+
+        if (eventListenerId) {
+          startEventPolling();
+          return;
+        }
+
+        if (eventListenerPromise) {
+          await eventListenerPromise;
+          return;
+        }
+
+        eventListenerPromise = (async () => {
+          eventListenerId = await api!.registerEventListener();
+
+          RED.log.info('[TaHoma Cloud] Execution event listener registered');
+        })();
+
+        try {
+          await eventListenerPromise;
+        } finally {
+          eventListenerPromise = null;
+        }
+
+        startEventPolling();
+      };
+
+      /**
+       * Poll execution events using one shared polling loop.
+       */
+      const startEventPolling = (): void => {
+        if (eventPollingPromise || !eventListenerId) {
+          return;
+        }
+
+        eventPollingPromise = (async () => {
+          while (!closing && eventListenerId && api) {
+            try {
+              const events = await api.fetchEvents(eventListenerId);
+
+              for (const event of events) {
+                processExecutionEvent(event);
+              }
+            } catch (error) {
+              if (isAuthenticationError(error)) {
+                authenticated = false;
+                api.invalidateSession();
+
+                try {
+                  await ensureAuthenticated();
+
+                  eventListenerId = await api.registerEventListener();
+
+                  RED.log.warn(
+                    '[TaHoma Cloud] Event listener re-registered after authentication recovery',
+                  );
+                } catch (recoveryError) {
+                  const details = getErrorDetails(recoveryError);
+
+                  RED.log.error(
+                    '[TaHoma Cloud] Event listener recovery failed: ' +
+                      details.message,
+                  );
+
+                  executionWaiters.forEach((waiter) => {
+                    clearTimeout(waiter.timer);
+                    waiter.reject(
+                      new Error(
+                        'Unable to recover Somfy Cloud event monitoring',
+                      ),
+                    );
+                  });
+
+                  executionWaiters.clear();
+                  eventListenerId = null;
+                  break;
+                }
+              } else {
+                const details = getErrorDetails(error);
+
+                RED.log.warn(
+                  '[TaHoma Cloud] Event polling failed: ' + details.message,
+                );
+              }
+            }
+
+            await eventPollingDelay(1000);
+          }
+        })().finally(() => {
+          eventPollingPromise = null;
+        });
+      };
+
+      /**
+       * Wait for a particular scenario execution.
+       */
+      const waitForExecution = (
+        execId: string,
+        timeoutSeconds: number,
+      ): Promise<void> => {
+        const previousEvent = terminalExecutionEvents.get(execId);
+
+        if (previousEvent) {
+          terminalExecutionEvents.delete(execId);
+
+          if (previousEvent.newState === 'FAILED') {
+            return Promise.reject(
+              new Error(
+                `Scenario execution failed. ` +
+                  `Execution ID: ${execId}. ` +
+                  `Failure: ${previousEvent.failureType || 'Unknown'}`,
+              ),
+            );
+          }
+
+          return Promise.resolve();
+        }
+
+        return new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            executionWaiters.delete(execId);
+
+            reject(
+              new Error(
+                `Scenario execution timed out after ${timeoutSeconds} seconds. ` +
+                  `Execution ID: ${execId}`,
+              ),
+            );
+          }, timeoutSeconds * 1000);
+
+          executionWaiters.set(execId, {
+            resolve,
+            reject,
+            timer,
+          });
+        });
+      };
+
+      /**
        * Retrieve scenarios from Somfy Cloud.
        *
        * A failed authentication request can be retried once
@@ -386,7 +606,7 @@ export = (RED: nodered.NodeAPI): void => {
 
           return actionGroups.map((group) => ({
             id: group.oid,
-            name: group.label,
+            name: group.label.trim(),
           }));
         } catch (error) {
           if (!isAuthenticationError(error)) {
@@ -403,7 +623,7 @@ export = (RED: nodered.NodeAPI): void => {
 
           return (await api.getActionGroups()).map((group) => ({
             id: group.oid,
-            name: group.label,
+            name: group.label.trim(),
           }));
         }
       };
@@ -473,6 +693,7 @@ export = (RED: nodered.NodeAPI): void => {
        */
       const executeScenario = async (
         scenarioId: string,
+        timeoutSeconds = 0,
       ): Promise<{ execId: string }> => {
         if (!api) {
           throw new Error('Cloud credentials or regional server are missing');
@@ -490,10 +711,26 @@ export = (RED: nodered.NodeAPI): void => {
           throw new Error('TaHoma Cloud configuration is closing');
         }
 
+        if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 0) {
+          throw new Error('Scenario timeout must be a non-negative number');
+        }
+
         await ensureAuthenticated();
+
+        /*
+         * Register the event listener before executing the scenario.
+         * This prevents missing fast execution completion events.
+         */
+        if (timeoutSeconds > 0) {
+          await ensureEventListener();
+        }
 
         try {
           const execution = await api.executeActionGroup(scenarioId);
+
+          if (timeoutSeconds > 0) {
+            await waitForExecution(execution.execId, timeoutSeconds);
+          }
 
           return {
             execId: execution.execId,
@@ -526,7 +763,9 @@ export = (RED: nodered.NodeAPI): void => {
 
       this['executeScenario'] = (
         scenarioId: string,
-      ): Promise<{ execId: string }> => executeScenario(scenarioId);
+        timeoutSeconds = 0,
+      ): Promise<{ execId: string }> =>
+        executeScenario(scenarioId, timeoutSeconds);
 
       this['getScenarioById'] = async (
         id: string,
@@ -575,13 +814,56 @@ export = (RED: nodered.NodeAPI): void => {
         closing = true;
         authenticated = false;
 
-        if (api) {
-          safeLogout(api);
-        }
+        executionWaiters.forEach((waiter) => {
+          clearTimeout(waiter.timer);
+          waiter.reject(new Error('TaHoma Cloud configuration is closing'));
+        });
 
-        if (typeof done === 'function') {
-          done();
-        }
+        executionWaiters.clear();
+        terminalExecutionEvents.clear();
+
+        const cleanup = async (): Promise<void> => {
+          if (eventPollingPromise) {
+            await eventPollingPromise;
+          }
+
+          if (api && eventListenerId) {
+            try {
+              await api.unregisterEventListener(eventListenerId);
+
+              RED.log.info(
+                '[TaHoma Cloud] Execution event listener unregistered',
+              );
+            } catch (error) {
+              const details = getErrorDetails(error);
+
+              RED.log.warn(
+                '[TaHoma Cloud] Event listener cleanup failed: ' +
+                  details.message,
+              );
+            }
+
+            eventListenerId = null;
+          }
+
+          if (api) {
+            safeLogout(api);
+          }
+        };
+
+        cleanup()
+          .catch((error) => {
+            const details = getErrorDetails(error);
+
+            RED.log.error(
+              '[TaHoma Cloud] Shutdown cleanup failed: ' + details.message,
+            );
+          })
+          .finally(() => {
+            if (typeof done === 'function') {
+              done();
+            }
+          });
       });
     },
     {

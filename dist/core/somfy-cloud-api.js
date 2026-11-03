@@ -246,6 +246,76 @@ var SomfyCloudApi = /** @class */ (function () {
         });
     };
     /**
+     * Register a Somfy Cloud event listener.
+     */
+    SomfyCloudApi.prototype.registerEventListener = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var response;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, this.request({
+                            url: "".concat(this.getEndpoint(), "events/register"),
+                            method: 'POST',
+                        })];
+                    case 1:
+                        response = _a.sent();
+                        if (!response.data || typeof response.data.id !== 'string') {
+                            throw new Error('Invalid event listener response from Somfy Cloud');
+                        }
+                        return [2 /*return*/, response.data.id];
+                }
+            });
+        });
+    };
+    /**
+     * Fetch events from a registered listener.
+     */
+    SomfyCloudApi.prototype.fetchEvents = function (listenerId) {
+        return __awaiter(this, void 0, void 0, function () {
+            var response;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!listenerId) {
+                            throw new Error('Event listener ID is required');
+                        }
+                        return [4 /*yield*/, this.request({
+                                url: "".concat(this.getEndpoint(), "events/").concat(encodeURIComponent(listenerId), "/fetch"),
+                                method: 'POST',
+                            })];
+                    case 1:
+                        response = _a.sent();
+                        if (!Array.isArray(response.data)) {
+                            throw new Error('Invalid events response from Somfy Cloud');
+                        }
+                        return [2 /*return*/, response.data];
+                }
+            });
+        });
+    };
+    /**
+     * Unregister a Somfy Cloud event listener.
+     */
+    SomfyCloudApi.prototype.unregisterEventListener = function (listenerId) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!listenerId) {
+                            return [2 /*return*/];
+                        }
+                        return [4 /*yield*/, this.request({
+                                url: "".concat(this.getEndpoint(), "events/").concat(encodeURIComponent(listenerId), "/unregister"),
+                                method: 'POST',
+                            })];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
      * Resolve the active cloud API endpoint.
      *
      * Legacy:

@@ -193,6 +193,14 @@ module.exports = function (RED) {
         var scenarios = null;
         var scenariosPromise = null;
         /*
+         * Shared scenario execution event monitoring.
+         */
+        var eventListenerId = null;
+        var eventListenerPromise = null;
+        var eventPollingPromise = null;
+        var executionWaiters = new Map();
+        var terminalExecutionEvents = new Map();
+        /*
          * Authentication initialization.
          */
         if (authMethod === 'oauth') {
@@ -301,13 +309,206 @@ module.exports = function (RED) {
             });
         }); };
         /**
+         * Small delay between event polling requests.
+         */
+        var eventPollingDelay = function (milliseconds) {
+            return new Promise(function (resolve) { return setTimeout(resolve, milliseconds); });
+        };
+        /**
+         * Process execution state events.
+         */
+        var processExecutionEvent = function (event) {
+            if (event.name !== 'ExecutionStateChangedEvent' ||
+                !event.execId ||
+                (event.newState !== 'COMPLETED' && event.newState !== 'FAILED')) {
+                return;
+            }
+            var waiter = executionWaiters.get(event.execId);
+            if (waiter) {
+                clearTimeout(waiter.timer);
+                executionWaiters.delete(event.execId);
+                if (event.newState === 'FAILED') {
+                    waiter.reject(new Error("Scenario execution failed. " +
+                        "Execution ID: ".concat(event.execId, ". ") +
+                        "Failure: ".concat(event.failureType || 'Unknown')));
+                }
+                else {
+                    waiter.resolve();
+                }
+                return;
+            }
+            /*
+             * Retain terminal events that arrive before their
+             * corresponding execution waiter is registered.
+             */
+            terminalExecutionEvents.set(event.execId, event);
+            /*
+             * Keep the event buffer bounded.
+             */
+            if (terminalExecutionEvents.size > 100) {
+                var oldestEventId = terminalExecutionEvents.keys().next().value;
+                if (oldestEventId) {
+                    terminalExecutionEvents.delete(oldestEventId);
+                }
+            }
+        };
+        /**
+         * Register the shared event listener.
+         *
+         * Only one listener is registered per Cloud configuration.
+         */
+        var ensureEventListener = function () { return __awaiter(_this, void 0, void 0, function () {
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!api) {
+                            throw new Error('Cloud credentials are unavailable');
+                        }
+                        return [4 /*yield*/, ensureAuthenticated()];
+                    case 1:
+                        _a.sent();
+                        if (eventListenerId) {
+                            startEventPolling();
+                            return [2 /*return*/];
+                        }
+                        if (!eventListenerPromise) return [3 /*break*/, 3];
+                        return [4 /*yield*/, eventListenerPromise];
+                    case 2:
+                        _a.sent();
+                        return [2 /*return*/];
+                    case 3:
+                        eventListenerPromise = (function () { return __awaiter(_this, void 0, void 0, function () {
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0: return [4 /*yield*/, api.registerEventListener()];
+                                    case 1:
+                                        eventListenerId = _a.sent();
+                                        RED.log.info('[TaHoma Cloud] Execution event listener registered');
+                                        return [2 /*return*/];
+                                }
+                            });
+                        }); })();
+                        _a.label = 4;
+                    case 4:
+                        _a.trys.push([4, , 6, 7]);
+                        return [4 /*yield*/, eventListenerPromise];
+                    case 5:
+                        _a.sent();
+                        return [3 /*break*/, 7];
+                    case 6:
+                        eventListenerPromise = null;
+                        return [7 /*endfinally*/];
+                    case 7:
+                        startEventPolling();
+                        return [2 /*return*/];
+                }
+            });
+        }); };
+        /**
+         * Poll execution events using one shared polling loop.
+         */
+        var startEventPolling = function () {
+            if (eventPollingPromise || !eventListenerId) {
+                return;
+            }
+            eventPollingPromise = (function () { return __awaiter(_this, void 0, void 0, function () {
+                var events, _i, events_1, event_1, error_2, recoveryError_1, details, details;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (!(!closing && eventListenerId && api)) return [3 /*break*/, 13];
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 11]);
+                            return [4 /*yield*/, api.fetchEvents(eventListenerId)];
+                        case 2:
+                            events = _a.sent();
+                            for (_i = 0, events_1 = events; _i < events_1.length; _i++) {
+                                event_1 = events_1[_i];
+                                processExecutionEvent(event_1);
+                            }
+                            return [3 /*break*/, 11];
+                        case 3:
+                            error_2 = _a.sent();
+                            if (!isAuthenticationError(error_2)) return [3 /*break*/, 9];
+                            authenticated = false;
+                            api.invalidateSession();
+                            _a.label = 4;
+                        case 4:
+                            _a.trys.push([4, 7, , 8]);
+                            return [4 /*yield*/, ensureAuthenticated()];
+                        case 5:
+                            _a.sent();
+                            return [4 /*yield*/, api.registerEventListener()];
+                        case 6:
+                            eventListenerId = _a.sent();
+                            RED.log.warn('[TaHoma Cloud] Event listener re-registered after authentication recovery');
+                            return [3 /*break*/, 8];
+                        case 7:
+                            recoveryError_1 = _a.sent();
+                            details = getErrorDetails(recoveryError_1);
+                            RED.log.error('[TaHoma Cloud] Event listener recovery failed: ' +
+                                details.message);
+                            executionWaiters.forEach(function (waiter) {
+                                clearTimeout(waiter.timer);
+                                waiter.reject(new Error('Unable to recover Somfy Cloud event monitoring'));
+                            });
+                            executionWaiters.clear();
+                            eventListenerId = null;
+                            return [3 /*break*/, 13];
+                        case 8: return [3 /*break*/, 10];
+                        case 9:
+                            details = getErrorDetails(error_2);
+                            RED.log.warn('[TaHoma Cloud] Event polling failed: ' + details.message);
+                            _a.label = 10;
+                        case 10: return [3 /*break*/, 11];
+                        case 11: return [4 /*yield*/, eventPollingDelay(1000)];
+                        case 12:
+                            _a.sent();
+                            return [3 /*break*/, 0];
+                        case 13: return [2 /*return*/];
+                    }
+                });
+            }); })().finally(function () {
+                eventPollingPromise = null;
+            });
+        };
+        /**
+         * Wait for a particular scenario execution.
+         */
+        var waitForExecution = function (execId, timeoutSeconds) {
+            var previousEvent = terminalExecutionEvents.get(execId);
+            if (previousEvent) {
+                terminalExecutionEvents.delete(execId);
+                if (previousEvent.newState === 'FAILED') {
+                    return Promise.reject(new Error("Scenario execution failed. " +
+                        "Execution ID: ".concat(execId, ". ") +
+                        "Failure: ".concat(previousEvent.failureType || 'Unknown')));
+                }
+                return Promise.resolve();
+            }
+            return new Promise(function (resolve, reject) {
+                var timer = setTimeout(function () {
+                    executionWaiters.delete(execId);
+                    reject(new Error("Scenario execution timed out after ".concat(timeoutSeconds, " seconds. ") +
+                        "Execution ID: ".concat(execId)));
+                }, timeoutSeconds * 1000);
+                executionWaiters.set(execId, {
+                    resolve: resolve,
+                    reject: reject,
+                    timer: timer,
+                });
+            });
+        };
+        /**
          * Retrieve scenarios from Somfy Cloud.
          *
          * A failed authentication request can be retried once
          * because retrieving scenarios does not execute actions.
          */
         var fetchScenarios = function () { return __awaiter(_this, void 0, void 0, function () {
-            var actionGroups, error_2;
+            var actionGroups, error_3;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -325,12 +526,12 @@ module.exports = function (RED) {
                         actionGroups = _a.sent();
                         return [2 /*return*/, actionGroups.map(function (group) { return ({
                                 id: group.oid,
-                                name: group.label,
+                                name: group.label.trim(),
                             }); })];
                     case 4:
-                        error_2 = _a.sent();
-                        if (!isAuthenticationError(error_2)) {
-                            throw error_2;
+                        error_3 = _a.sent();
+                        if (!isAuthenticationError(error_3)) {
+                            throw error_3;
                         }
                         RED.log.warn('[TaHoma Cloud] Authentication error while retrieving scenarios. Re-authenticating.');
                         authenticated = false;
@@ -340,7 +541,7 @@ module.exports = function (RED) {
                         return [4 /*yield*/, api.getActionGroups()];
                     case 6: return [2 /*return*/, (_a.sent()).map(function (group) { return ({
                             id: group.oid,
-                            name: group.label,
+                            name: group.label.trim(),
                         }); })];
                     case 7: return [2 /*return*/];
                 }
@@ -357,7 +558,7 @@ module.exports = function (RED) {
                 args_1[_i] = arguments[_i];
             }
             return __awaiter(_this, __spreadArray([], args_1, true), void 0, function (forceRefresh) {
-                var error_3, details;
+                var error_4, details;
                 var _this = this;
                 if (forceRefresh === void 0) { forceRefresh = false; }
                 return __generator(this, function (_a) {
@@ -397,13 +598,13 @@ module.exports = function (RED) {
                             return [4 /*yield*/, scenariosPromise];
                         case 2: return [2 /*return*/, _a.sent()];
                         case 3:
-                            error_3 = _a.sent();
-                            details = getErrorDetails(error_3);
+                            error_4 = _a.sent();
+                            details = getErrorDetails(error_4);
                             RED.log.error("[TaHoma Cloud] Unable to retrieve scenarios. " +
                                 "Message: ".concat(details.message, ", ") +
                                 "HTTP status: ".concat(details.status || 'N/A', ", ") +
                                 "Code: ".concat(details.code || 'N/A'));
-                            throw error_3;
+                            throw error_4;
                         case 4:
                             scenariosPromise = null;
                             return [7 /*endfinally*/];
@@ -417,47 +618,66 @@ module.exports = function (RED) {
          *
          * Never automatically retry scenario execution.
          */
-        var executeScenario = function (scenarioId) { return __awaiter(_this, void 0, void 0, function () {
-            var execution, error_4;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        if (!api) {
-                            throw new Error('Cloud credentials or regional server are missing');
-                        }
-                        if (!scenarioId ||
-                            typeof scenarioId !== 'string' ||
-                            !scenarioId.trim()) {
-                            throw new Error('A valid scenario ID is required');
-                        }
-                        if (closing) {
-                            throw new Error('TaHoma Cloud configuration is closing');
-                        }
-                        return [4 /*yield*/, ensureAuthenticated()];
-                    case 1:
-                        _a.sent();
-                        _a.label = 2;
-                    case 2:
-                        _a.trys.push([2, 4, , 5]);
-                        return [4 /*yield*/, api.executeActionGroup(scenarioId)];
-                    case 3:
-                        execution = _a.sent();
-                        return [2 /*return*/, {
+        var executeScenario = function (scenarioId_1) {
+            var args_1 = [];
+            for (var _i = 1; _i < arguments.length; _i++) {
+                args_1[_i - 1] = arguments[_i];
+            }
+            return __awaiter(_this, __spreadArray([scenarioId_1], args_1, true), void 0, function (scenarioId, timeoutSeconds) {
+                var execution, error_5;
+                if (timeoutSeconds === void 0) { timeoutSeconds = 0; }
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (!api) {
+                                throw new Error('Cloud credentials or regional server are missing');
+                            }
+                            if (!scenarioId ||
+                                typeof scenarioId !== 'string' ||
+                                !scenarioId.trim()) {
+                                throw new Error('A valid scenario ID is required');
+                            }
+                            if (closing) {
+                                throw new Error('TaHoma Cloud configuration is closing');
+                            }
+                            if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 0) {
+                                throw new Error('Scenario timeout must be a non-negative number');
+                            }
+                            return [4 /*yield*/, ensureAuthenticated()];
+                        case 1:
+                            _a.sent();
+                            if (!(timeoutSeconds > 0)) return [3 /*break*/, 3];
+                            return [4 /*yield*/, ensureEventListener()];
+                        case 2:
+                            _a.sent();
+                            _a.label = 3;
+                        case 3:
+                            _a.trys.push([3, 7, , 8]);
+                            return [4 /*yield*/, api.executeActionGroup(scenarioId)];
+                        case 4:
+                            execution = _a.sent();
+                            if (!(timeoutSeconds > 0)) return [3 /*break*/, 6];
+                            return [4 /*yield*/, waitForExecution(execution.execId, timeoutSeconds)];
+                        case 5:
+                            _a.sent();
+                            _a.label = 6;
+                        case 6: return [2 /*return*/, {
                                 execId: execution.execId,
                             }];
-                    case 4:
-                        error_4 = _a.sent();
-                        if (isAuthenticationError(error_4)) {
-                            authenticated = false;
-                            api.invalidateSession();
-                            RED.log.warn('[TaHoma Cloud] Authentication error during scenario execution. ' +
-                                'The execution was not automatically retried.');
-                        }
-                        throw error_4;
-                    case 5: return [2 /*return*/];
-                }
+                        case 7:
+                            error_5 = _a.sent();
+                            if (isAuthenticationError(error_5)) {
+                                authenticated = false;
+                                api.invalidateSession();
+                                RED.log.warn('[TaHoma Cloud] Authentication error during scenario execution. ' +
+                                    'The execution was not automatically retried.');
+                            }
+                            throw error_5;
+                        case 8: return [2 /*return*/];
+                    }
+                });
             });
-        }); };
+        };
         /*
          * Public configuration-node API.
          */
@@ -467,7 +687,10 @@ module.exports = function (RED) {
         this['refreshScenarios'] = function () {
             return retrieveScenarios(true);
         };
-        this['executeScenario'] = function (scenarioId) { return executeScenario(scenarioId); };
+        this['executeScenario'] = function (scenarioId, timeoutSeconds) {
+            if (timeoutSeconds === void 0) { timeoutSeconds = 0; }
+            return executeScenario(scenarioId, timeoutSeconds);
+        };
         this['getScenarioById'] = function (id) { return __awaiter(_this, void 0, void 0, function () {
             var availableScenarios;
             return __generator(this, function (_a) {
@@ -510,12 +733,59 @@ module.exports = function (RED) {
         this.on('close', function (removed, done) {
             closing = true;
             authenticated = false;
-            if (api) {
-                safeLogout(api);
-            }
-            if (typeof done === 'function') {
-                done();
-            }
+            executionWaiters.forEach(function (waiter) {
+                clearTimeout(waiter.timer);
+                waiter.reject(new Error('TaHoma Cloud configuration is closing'));
+            });
+            executionWaiters.clear();
+            terminalExecutionEvents.clear();
+            var cleanup = function () { return __awaiter(_this, void 0, void 0, function () {
+                var error_6, details;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (!eventPollingPromise) return [3 /*break*/, 2];
+                            return [4 /*yield*/, eventPollingPromise];
+                        case 1:
+                            _a.sent();
+                            _a.label = 2;
+                        case 2:
+                            if (!(api && eventListenerId)) return [3 /*break*/, 7];
+                            _a.label = 3;
+                        case 3:
+                            _a.trys.push([3, 5, , 6]);
+                            return [4 /*yield*/, api.unregisterEventListener(eventListenerId)];
+                        case 4:
+                            _a.sent();
+                            RED.log.info('[TaHoma Cloud] Execution event listener unregistered');
+                            return [3 /*break*/, 6];
+                        case 5:
+                            error_6 = _a.sent();
+                            details = getErrorDetails(error_6);
+                            RED.log.warn('[TaHoma Cloud] Event listener cleanup failed: ' +
+                                details.message);
+                            return [3 /*break*/, 6];
+                        case 6:
+                            eventListenerId = null;
+                            _a.label = 7;
+                        case 7:
+                            if (api) {
+                                safeLogout(api);
+                            }
+                            return [2 /*return*/];
+                    }
+                });
+            }); };
+            cleanup()
+                .catch(function (error) {
+                var details = getErrorDetails(error);
+                RED.log.error('[TaHoma Cloud] Shutdown cleanup failed: ' + details.message);
+            })
+                .finally(function () {
+                if (typeof done === 'function') {
+                    done();
+                }
+            });
         });
     }, {
         credentials: {
@@ -539,7 +809,7 @@ module.exports = function (RED) {
      * - Supports an existing refresh-token session.
      */
     RED.httpAdmin.post('/somfy/cloud/test', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
-        var body, configNodeId, submittedUserId, submittedPassword, region, gatewayId, authMethod, configNode, storedCredentials, userId, userPassword, hasStoredOAuthSession, testApi, testAuth, authenticated, gateways, actionGroups_1, session, serverUrl, actionGroups, error_5, details, status_1;
+        var body, configNodeId, submittedUserId, submittedPassword, region, gatewayId, authMethod, configNode, storedCredentials, userId, userPassword, hasStoredOAuthSession, testApi, testAuth, authenticated, gateways, actionGroups_1, session, serverUrl, actionGroups, error_7, details, status_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -706,13 +976,13 @@ module.exports = function (RED) {
                         "".concat(actionGroups.length, " scenarios discovered."));
                     return [3 /*break*/, 10];
                 case 8:
-                    error_5 = _a.sent();
-                    details = getErrorDetails(error_5);
+                    error_7 = _a.sent();
+                    details = getErrorDetails(error_7);
                     RED.log.error("[TaHoma Cloud Test] ".concat(authMethod, " connection failed. ") +
                         "Message: ".concat(details.message, ", ") +
                         "HTTP status: ".concat(details.status || 'N/A', ", ") +
                         "Code: ".concat(details.code || 'N/A'));
-                    status_1 = getHttpStatus(error_5, authenticated ? http_response_enum_1.HttpResponse.SERVER_ERROR : http_response_enum_1.HttpResponse.UNAUTHORIZED);
+                    status_1 = getHttpStatus(error_7, authenticated ? http_response_enum_1.HttpResponse.SERVER_ERROR : http_response_enum_1.HttpResponse.UNAUTHORIZED);
                     if (!response.headersSent) {
                         response.status(status_1);
                         response.json({
@@ -746,7 +1016,7 @@ module.exports = function (RED) {
      * ?refresh=true forces a cloud retrieval.
      */
     RED.httpAdmin.get('/somfy/cloud/:account/scenarios', function (request, response) { return __awaiter(void 0, void 0, void 0, function () {
-        var configNode, getScenarios, refreshScenarios, forceRefresh, availableScenarios, _a, error_6, details;
+        var configNode, getScenarios, refreshScenarios, forceRefresh, availableScenarios, _a, error_8, details;
         var _b;
         return __generator(this, function (_c) {
             switch (_c.label) {
@@ -788,13 +1058,13 @@ module.exports = function (RED) {
                     });
                     return [3 /*break*/, 7];
                 case 6:
-                    error_6 = _c.sent();
-                    details = getErrorDetails(error_6);
+                    error_8 = _c.sent();
+                    details = getErrorDetails(error_8);
                     RED.log.error("[TaHoma Cloud] Unable to retrieve scenarios. " +
                         "Message: ".concat(details.message, ", ") +
                         "HTTP status: ".concat(details.status || 'N/A', ", ") +
                         "Code: ".concat(details.code || 'N/A'));
-                    response.status(getHttpStatus(error_6, http_response_enum_1.HttpResponse.SERVER_ERROR));
+                    response.status(getHttpStatus(error_8, http_response_enum_1.HttpResponse.SERVER_ERROR));
                     response.json({
                         error: 'Unable to retrieve Somfy scenarios',
                         details: details.message,

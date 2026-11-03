@@ -61,6 +61,50 @@
       $region.val(this.region || 'europe');
       $gateway.val(this.gatewayId || '');
 
+      function discoverSavedInstallations() {
+        if (configNode.authMethod !== 'oauth' || !configNode.id) {
+          return;
+        }
+
+        $.ajax({
+          url:
+            window.location.protocol +
+            '//' +
+            window.location.host +
+            window.location.pathname +
+            'somfy/cloud/test',
+
+          method: 'POST',
+
+          data: {
+            configNodeId: configNode.id,
+            authMethod: 'oauth',
+            userId: '',
+            userPassword: '',
+            gatewayId: '',
+          },
+
+          success: function (response) {
+            if (
+              !response ||
+              !response.success ||
+              !Array.isArray(response.gateways)
+            ) {
+              return;
+            }
+
+            populateGateways(response.gateways, configNode.gatewayId);
+          },
+
+          error: function (xhr) {
+            console.warn(
+              '[TaHoma Cloud] Unable to restore installations:',
+              xhr.responseJSON || xhr.statusText,
+            );
+          },
+        });
+      }
+
       /**
        * Display the correct authentication fields.
        */
@@ -87,9 +131,7 @@
       function showError(message) {
         $('#node-config-cloud-result').hide();
 
-        $('#node-config-cloud-error')
-          .text(message)
-          .show();
+        $('#node-config-cloud-error').text(message).show();
       }
 
       /**
@@ -98,18 +140,17 @@
       function showSuccess(message) {
         $('#node-config-cloud-error').hide();
 
-        $('#node-config-cloud-result')
-          .text(message)
-          .show();
+        $('#node-config-cloud-result').text(message).show();
       }
 
       /**
        * Populate the installation selector.
        */
-      function populateGateways(gateways) {
-        discoveredGateways = Array.isArray(gateways)
-          ? gateways
-          : [];
+      function populateGateways(gateways, preferredGatewayId) {
+        discoveredGateways = Array.isArray(gateways) ? gateways : [];
+
+        const selectedGatewayId =
+          preferredGatewayId || configNode.gatewayId || '';
 
         $gateway.empty();
 
@@ -121,36 +162,30 @@
         );
 
         discoveredGateways.forEach(function (gateway) {
-          const label =
-            gateway.label ||
-            gateway.homeId ||
-            gateway.gatewayId;
+          const label = gateway.label || gateway.homeId || gateway.gatewayId;
 
-          const country = gateway.country
-            ? ' (' + gateway.country + ')'
-            : '';
+          const country = gateway.country ? ' (' + gateway.country + ')' : '';
 
           $gateway.append(
             $('<option>', {
               value: gateway.gatewayId,
-              text:
-                label +
-                country +
-                ' - ' +
-                gateway.gatewayId,
+              text: label + country + ' - ' + gateway.gatewayId,
             }),
           );
         });
 
-        if (configNode.gatewayId) {
-          $gateway.val(configNode.gatewayId);
-        }
-
+        // Restore the previously selected installation.
         if (
-          !$gateway.val() &&
-          discoveredGateways.length === 1
+          selectedGatewayId &&
+          discoveredGateways.some(function (gateway) {
+            return gateway.gatewayId === selectedGatewayId;
+          })
         ) {
+          $gateway.val(selectedGatewayId);
+        } else if (discoveredGateways.length === 1) {
           $gateway.val(discoveredGateways[0].gatewayId);
+        } else {
+          $gateway.val('');
         }
       }
 
@@ -177,200 +212,174 @@
        * 1. Authenticate using the regional API.
        * 2. Retrieve scenarios.
        */
-      $testButton
-        .off('click')
-        .on('click', function () {
-          const button = $(this);
+      $testButton.off('click').on('click', function () {
+        const button = $(this);
 
-          const authMethod = $authMethod.val();
+        const authMethod = $authMethod.val();
 
-          const userId = $(
-            '#node-config-input-userId',
-          ).val();
+        const userId = $('#node-config-input-userId').val();
 
-          const enteredPassword = $(
-            '#node-config-input-userPassword',
-          ).val();
+        const enteredPassword = $('#node-config-input-userPassword').val();
 
-          const region = $region.val();
+        const region = $region.val();
 
-          const hasStoredPassword = !!(
-            configNode.credentials &&
-            configNode.credentials.has_userPassword
-          );
+        const hasStoredPassword = !!(
+          configNode.credentials && configNode.credentials.has_userPassword
+        );
 
-          const userPassword =
-            enteredPassword &&
-            enteredPassword !== '__PWRD__'
-              ? enteredPassword
-              : '';
+        const userPassword =
+          enteredPassword && enteredPassword !== '__PWRD__'
+            ? enteredPassword
+            : '';
 
-          if (!userId) {
-            showError('Please enter your Somfy email.');
-            return;
-          }
+        if (!userId) {
+          showError('Please enter your Somfy email.');
+          return;
+        }
 
-          if (!userPassword && !hasStoredPassword) {
-            showError('Please enter your Somfy password.');
-            return;
-          }
+        if (!userPassword && !hasStoredPassword) {
+          showError('Please enter your Somfy password.');
+          return;
+        }
 
-          const gatewayId =
-            authMethod === 'oauth'
-              ? $gateway.val()
-              : '';
+        const gatewayId = authMethod === 'oauth' ? $gateway.val() : '';
 
-          if (
-            authMethod === 'oauth' &&
-            gatewayId &&
-            discoveredGateways.length > 0 &&
-            !getSelectedGateway()
-          ) {
-            showError(
-              'Please select a valid discovered installation.',
-            );
-            return;
-          }
+        if (
+          authMethod === 'oauth' &&
+          gatewayId &&
+          discoveredGateways.length > 0 &&
+          !getSelectedGateway()
+        ) {
+          showError('Please select a valid discovered installation.');
+          return;
+        }
 
-          button
-            .prop('disabled', true)
-            .text('Connecting...');
+        button.prop('disabled', true).text('Connecting...');
 
-          $('#node-config-cloud-result').hide();
-          $('#node-config-cloud-error').hide();
+        $('#node-config-cloud-result').hide();
+        $('#node-config-cloud-error').hide();
 
-          const requestData = {
-            configNodeId: configNode.id,
-            authMethod: authMethod,
-            userId: userId,
-            userPassword: userPassword,
-            region: region,
-            gatewayId: gatewayId,
-          };
+        const requestData = {
+          configNodeId: configNode.id,
+          authMethod: authMethod,
+          userId: userId,
+          userPassword: userPassword,
+          region: region,
+          gatewayId: gatewayId,
+        };
 
-          $.ajax({
-            url:
-              window.location.protocol +
-              '//' +
-              window.location.host +
-              window.location.pathname +
-              'somfy/cloud/test',
+        $.ajax({
+          url:
+            window.location.protocol +
+            '//' +
+            window.location.host +
+            window.location.pathname +
+            'somfy/cloud/test',
 
-            method: 'POST',
-            data: requestData,
+          method: 'POST',
+          data: requestData,
 
-            success: function (response) {
-              if (!response || !response.success) {
-                showError(
-                  (response && response.error) ||
-                    'Connection failed.',
-                );
-                return;
+          success: function (response) {
+            if (!response || !response.success) {
+              showError((response && response.error) || 'Connection failed.');
+              return;
+            }
+
+            if (authMethod === 'oauth') {
+              /*
+               * Installation discovery response.
+               */
+              if (Array.isArray(response.gateways)) {
+                populateGateways(response.gateways);
+
+                if (response.gateways.length === 0) {
+                  showError('No Somfy installations were found.');
+                  return;
+                }
+
+                /*
+                 * No installation was submitted.
+                 * Ask the user to select one.
+                 */
+                if (!gatewayId) {
+                  if (response.gateways.length === 1) {
+                    const onlyGateway = response.gateways[0];
+
+                    $gateway.val(onlyGateway.gatewayId);
+
+                    showSuccess(
+                      'Installation discovered: ' +
+                        (onlyGateway.label || onlyGateway.gatewayId) +
+                        '. Click Test Cloud Connection again ' +
+                        'to validate it.',
+                    );
+                  } else {
+                    showSuccess(
+                      response.gateways.length +
+                        ' installations found. Please select ' +
+                        'one and test the connection again.',
+                    );
+                  }
+
+                  return;
+                }
               }
 
-              if (authMethod === 'oauth') {
-                /*
-                 * Installation discovery response.
-                 */
-                if (Array.isArray(response.gateways)) {
-                  populateGateways(response.gateways);
-
-                  if (response.gateways.length === 0) {
-                    showError(
-                      'No Somfy installations were found.',
-                    );
-                    return;
-                  }
-
-                  /*
-                   * No installation was submitted.
-                   * Ask the user to select one.
-                   */
-                  if (!gatewayId) {
-                    if (response.gateways.length === 1) {
-                      const onlyGateway =
-                        response.gateways[0];
-
-                      $gateway.val(onlyGateway.gatewayId);
-
-                      showSuccess(
-                        'Installation discovered: ' +
-                          (onlyGateway.label ||
-                            onlyGateway.gatewayId) +
-                          '. Click Test Cloud Connection again ' +
-                          'to validate it.',
-                      );
-                    } else {
-                      showSuccess(
-                        response.gateways.length +
-                          ' installations found. Please select ' +
-                          'one and test the connection again.',
-                      );
-                    }
-
-                    return;
-                  }
-                }
+              /*
+               * Installation validation response.
+               */
+              if (response.selectedGateway) {
+                $gateway.val(response.selectedGateway);
 
                 /*
-                 * Installation validation response.
+                 * Keep the editor configuration synchronized.
                  */
-                if (response.selectedGateway) {
-                  $gateway.val(response.selectedGateway);
-                }
+                configNode.gatewayId = response.selectedGateway;
+              }
 
-                if (
-                  response.selectedGateway &&
-                  response.scenarioCount !== undefined
-                ) {
-                  showSuccess(
-                    'OAuth connection successful! Found ' +
-                      response.scenarioCount +
-                      ' scenario(s).',
-                  );
-                } else {
-                  showError(
-                    response.message ||
-                      'Installation validation was not completed.',
-                  );
-                }
-              } else {
+              if (
+                response.selectedGateway &&
+                response.scenarioCount !== undefined
+              ) {
                 showSuccess(
-                  'Legacy connection successful! Found ' +
+                  'OAuth connection successful! Found ' +
                     response.scenarioCount +
                     ' scenario(s).',
                 );
+              } else {
+                showError(
+                  response.message ||
+                    'Installation validation was not completed.',
+                );
               }
-            },
+            } else {
+              showSuccess(
+                'Legacy connection successful! Found ' +
+                  response.scenarioCount +
+                  ' scenario(s).',
+              );
+            }
+          },
 
-            error: function (xhr) {
-              let message = 'Unknown connection error';
+          error: function (xhr) {
+            let message = 'Unknown connection error';
 
-              if (
-                xhr.responseJSON &&
-                xhr.responseJSON.details
-              ) {
-                message = xhr.responseJSON.details;
-              } else if (
-                xhr.responseJSON &&
-                xhr.responseJSON.error
-              ) {
-                message = xhr.responseJSON.error;
-              } else if (xhr.statusText) {
-                message =
-                  xhr.status + ' - ' + xhr.statusText;
-              }
+            if (xhr.responseJSON && xhr.responseJSON.details) {
+              message = xhr.responseJSON.details;
+            } else if (xhr.responseJSON && xhr.responseJSON.error) {
+              message = xhr.responseJSON.error;
+            } else if (xhr.statusText) {
+              message = xhr.status + ' - ' + xhr.statusText;
+            }
 
-              showError('Connection failed: ' + message);
-            },
+            showError('Connection failed: ' + message);
+          },
 
-            complete: function () {
-              button
-                .prop('disabled', false)
-                .text('Test Cloud Connection');
-            },
-          });
+          complete: function () {
+            button.prop('disabled', false).text('Test Cloud Connection');
+          },
         });
+      });
 
       /**
        * Reset the test state when the installation changes.
@@ -390,10 +399,10 @@
       updateAuthenticationFields();
 
       /*
-       * Restore the previously saved gateway.
+       * Restore the previously saved installation.
        */
-      if (configNode.gatewayId) {
-        $gateway.val(configNode.gatewayId);
+      if (configNode.authMethod === 'oauth') {
+        discoverSavedInstallations();
       }
     },
 
@@ -401,39 +410,26 @@
      * Save configuration values.
      */
     oneditsave: function () {
-      const authMethod =
-        $('#node-config-input-authMethod').val();
+      const authMethod = $('#node-config-input-authMethod').val();
 
-      const gatewayId =
-        $('#node-config-input-gatewayId').val();
+      const gatewayId = $('#node-config-input-gatewayId').val();
 
       this.authMethod = authMethod || 'legacy';
 
-      this.region =
-        $('#node-config-input-region').val() || 'europe';
+      this.region = $('#node-config-input-region').val() || 'europe';
 
-      this.gatewayId =
-        authMethod === 'oauth'
-          ? gatewayId || ''
-          : '';
+      this.gatewayId = authMethod === 'oauth' ? gatewayId || '' : '';
     },
   });
 </script>
 
-<script
-  type="text/html"
-  data-template-name="tahoma-cloud-config"
->
+<script type="text/html" data-template-name="tahoma-cloud-config">
   <div class="form-row">
     <label for="node-config-input-name">
       <i class="fa fa-tag"></i> Connection name
     </label>
 
-    <input
-      type="text"
-      id="node-config-input-name"
-      placeholder="TaHoma Cloud"
-    >
+    <input type="text" id="node-config-input-name" placeholder="TaHoma Cloud" />
   </div>
 
   <div class="form-row">
@@ -442,13 +438,9 @@
     </label>
 
     <select id="node-config-input-authMethod">
-      <option value="legacy">
-        Legacy authentication
-      </option>
+      <option value="legacy">Legacy authentication</option>
 
-      <option value="oauth">
-        New Somfy OAuth authentication
-      </option>
+      <option value="oauth">New Somfy OAuth authentication</option>
     </select>
   </div>
 
@@ -457,11 +449,7 @@
       <i class="fa fa-user"></i> Somfy email
     </label>
 
-    <input
-      type="text"
-      id="node-config-input-userId"
-      autocomplete="username"
-    >
+    <input type="text" id="node-config-input-userId" autocomplete="username" />
   </div>
 
   <div class="form-row">
@@ -473,7 +461,7 @@
       type="password"
       id="node-config-input-userPassword"
       autocomplete="new-password"
-    >
+    />
   </div>
 
   <div class="form-row tahoma-legacy-region">
@@ -493,19 +481,18 @@
       <strong>New Somfy authentication</strong>
 
       <p>
-        The new authentication method uses Somfy OAuth
-        tokens and automatically discovers the installations
-        linked to your Somfy account.
+        The new authentication method uses Somfy OAuth tokens and automatically
+        discovers the installations linked to your Somfy account.
       </p>
 
       <p>
-        Select an installation after discovery. Its regional
-        API endpoint is determined automatically.
+        Select an installation after discovery. Its regional API endpoint is
+        determined automatically.
       </p>
 
       <p>
-        Your refresh token is stored securely by Node-RED.
-        It is not displayed in this editor.
+        Your refresh token is stored securely by Node-RED. It is not displayed
+        in this editor.
       </p>
     </div>
   </div>
@@ -516,9 +503,7 @@
     </label>
 
     <select id="node-config-input-gatewayId">
-      <option value="">
-        Discover installations first
-      </option>
+      <option value="">Discover installations first</option>
     </select>
   </div>
 
@@ -551,19 +536,17 @@
   ></div>
 
   <div class="form-tips">
-    This configuration connects to your existing Somfy
-    TaHoma Cloud account.
-
-    It does not replace or modify the local TaHoma connection.
+    This configuration connects to your existing Somfy TaHoma Cloud account. It
+    does not replace or modify the local TaHoma connection.
 
     <p>
-      Legacy authentication retains the existing regional
-      server and JSESSIONID login mechanism.
+      Legacy authentication retains the existing regional server and JSESSIONID
+      login mechanism.
     </p>
 
     <p>
-      New Somfy authentication uses OAuth and automatically
-      refreshes authentication tokens.
+      New Somfy authentication uses OAuth and automatically refreshes
+      authentication tokens.
     </p>
   </div>
 
@@ -573,17 +556,10 @@
   -->
 </script>
 
-<script
-  type="text/html"
-  data-help-name="tahoma-cloud-config"
->
-  <p>
-    Configuration for Somfy TaHoma Cloud scenario control.
-  </p>
+<script type="text/html" data-help-name="tahoma-cloud-config">
+  <p>Configuration for Somfy TaHoma Cloud scenario control.</p>
 
-  <p>
-    Select one of the two available authentication methods:
-  </p>
+  <p>Select one of the two available authentication methods:</p>
 
   <ul>
     <li>
@@ -593,18 +569,17 @@
 
     <li>
       <strong>New Somfy OAuth:</strong>
-      Uses Somfy OAuth authentication, BOB installation
-      discovery and automatic token refresh.
+      Uses Somfy OAuth authentication, BOB installation discovery and automatic
+      token refresh.
     </li>
   </ul>
 
   <p>
-    OAuth installations are discovered automatically.
-    Select the installation you want to control.
+    OAuth installations are discovered automatically. Select the installation
+    you want to control.
   </p>
 
   <p>
-    Existing TaHoma scenarios remain available through
-    the cloud scenario nodes.
+    Existing TaHoma scenarios remain available through the cloud scenario nodes.
   </p>
 </script>

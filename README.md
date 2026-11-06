@@ -54,17 +54,17 @@ This 3rd version implements a new API released by Somfy (yes, another one). This
 The cloud scenario control code / nodes introduced in release 3.3.2 implement the Somfy OAuth authentication mechanism adapted from the python-overkiz-api,
 copyright (c) 2020 Mick Vleeshouwer, original repository: https://github.com/iMicknl/python-overkiz-api.
 
-#### How to upgrade?
+#### How to upgrade from Nikkhow original package or its forks ?
 
-Even though your flows should not be modified, the [config-node](https://nodered.org/docs/user-guide/editor/workspace/nodes#configuration-nodes) must be reconfigured using this new API.
+Even though your flows should not be modified, the [config-node](https://nodered.org/docs/user-guide/editor/workspace/nodes#configuration-nodes) must be reconfigured.
 
 The Node IDs of this fork have been kept the same as the Nikkow version to ease the transition of existing Node Red flows (export your flows, uninstall Nikkow package, install this one, import your flows).
 
-**However**, please note that even though this release was tested before being published, you might encounter unexpected issues. **Please backup your flow before proceeding with this major release**.
+**However**, please note that even though this release was tested before being published, you might encounter unexpected issues. **Please backup your flow before proceeding with upgrading to this major release**.
 
 ## 🚨 Setup
 
-You can read this [guide](https://nodered.org/docs/getting-started/adding-nodes) from Node-RED official portal. This will help you install this node. Typically, the command are as follows:
+You can read this [guide](https://nodered.org/docs/getting-started/adding-nodes) from Node-RED official portal. This will help you install this node. Typically, you can install it either through the Node-RED palette manager GUI or with the following command lines:
 
 	cd $HOME/.node-red
 	npm install @nils-github1/node-red-contrib-tahoma 

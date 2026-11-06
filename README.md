@@ -43,10 +43,9 @@ The choice is yours, depending on your requirements, including risks related to 
 
 ### Which Somfy account should I use?
 
-For Cloud scenario control, you can use your existing Somfy account, however creating a separate account through the Somfy mobile application is recommended.
+For Cloud scenario control, you can use your existing Somfy account, however creating a separate account through the Somfy mobile application is recommended. Note: There are some reported logout from the mobile app while using the same account on Node-RED, so a separate account is recommended.
 
-If you create a separate account, make sure it has the appropriate permissions to access and execute scenarios. The Resident role is recommended; Guest permissions are not sufficient.
-
+If you create a separate account, make sure it has the appropriate permissions to access and execute scenarios. The Resident role is recommended; Guest permissions are not sufficient. You can read this [guide](https://www.somfypro.com/support/faq?question=how-to-add-a-user-to-my-installation-in-tahoma-by-somfy-app) from Somfy official FAQ.
 
 ### Origin and History
 

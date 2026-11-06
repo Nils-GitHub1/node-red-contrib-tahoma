@@ -293,7 +293,7 @@ export = (RED: nodered.NodeAPI) => {
   );
 };
 
-function getBoolean(value: any): boolean {
+function getBoolean(value: unknown): boolean {
   switch (String(value).toLowerCase()) {
     case 'true':
     case '1':

@@ -103,6 +103,7 @@ export class SomfyApi {
             `HTTP: ${status || 'No response'}. ` +
             `Code: ${error.code || 'N/A'}. ` +
             `Server response: ${serverError || 'No response body'}`,
+          { cause: error },
         );
       }
 
@@ -237,9 +238,7 @@ export class SomfyApi {
       (config) => {
         const accessToken = this.getAccessToken();
 
-        config.headers = config.headers || ({} as any);
-
-        (config.headers as any)['Authorization'] = `Bearer ${accessToken}`;
+        config.headers.set('Authorization', `Bearer ${accessToken}`);
 
         return config;
       },
@@ -255,8 +254,8 @@ export class SomfyApi {
    * Axios automatically rejects HTTP responses outside the 2xx range.
    * The original error is preserved for better diagnostics.
    */
-  private async _request(options: AxiosRequestConfig): Promise<any> {
-    const response: AxiosResponse = await this.axiosInstance({
+  private async _request<T = unknown>(options: AxiosRequestConfig): Promise<T> {
+    const response: AxiosResponse<T> = await this.axiosInstance({
       timeout: API_TIMEOUT,
       ...options,
     });
@@ -298,7 +297,7 @@ export class SomfyApi {
   public getDevice(device: string): Promise<IDevice> {
     const sanitizedDeviceUrl = encodeURIComponent(device);
 
-    return this._request({
+    return this._request<IDevice>({
       url: `${this.getGatewayUrl()}/setup/devices/${sanitizedDeviceUrl}`,
       method: 'GET',
     });
@@ -312,7 +311,7 @@ export class SomfyApi {
   ): Promise<Array<{ name: string; value: unknown }>> {
     const sanitizedDeviceUrl = encodeURIComponent(device);
 
-    return this._request({
+    return this._request<Array<{ name: string; value: unknown }>>({
       url: `${this.getGatewayUrl()}/setup/devices/${sanitizedDeviceUrl}/states`,
       method: 'GET',
     });
@@ -356,7 +355,7 @@ export class SomfyApi {
   /**
    * Retrieve the status of a command execution.
    */
-  public getStatusForExecutionId(execId: string) {
+  public getStatusForExecutionId(execId: string): Promise<unknown> {
     const sanitizedExecId = encodeURIComponent(execId);
 
     return this._request({

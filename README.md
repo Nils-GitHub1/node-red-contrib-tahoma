@@ -7,9 +7,9 @@
 [![npm version](https://img.shields.io/npm/v/%40nils-github1/node-red-contrib-tahoma?logo=npm&label=npm)](https://www.npmjs.com/package/@nils-github1/node-red-contrib-tahoma)
 [![npm downloads](https://img.shields.io/npm/dt/%40nils-github1/node-red-contrib-tahoma?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/@nils-github1/node-red-contrib-tahoma)
 [![License](https://img.shields.io/npm/l/%40nils-github1/node-red-contrib-tahoma)](https://github.com/Nils-GitHub1/node-red-contrib-tahoma/blob/develop/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/Nils-GitHub1/node-red-contrib-tahoma?style=social)](https://github.com/Nils-GitHub1/node-red-contrib-tahoma)
 [![Build and Lint](https://github.com/Nils-GitHub1/node-red-contrib-tahoma/actions/workflows/build.yml/badge.svg?branch=develop&label=build%20%26%20lint)](https://github.com/Nils-GitHub1/node-red-contrib-tahoma/actions/workflows/build.yml)
 [![Code size](https://img.shields.io/github/languages/code-size/Nils-GitHub1/node-red-contrib-tahoma)]
+[![GitHub stars](https://img.shields.io/github/stars/Nils-GitHub1/node-red-contrib-tahoma?style=social)](https://github.com/Nils-GitHub1/node-red-contrib-tahoma)
 
 Since version **3.3.2**, this package supports two complementary ways to interact with your Somfy TaHoma installation.
 
@@ -221,9 +221,13 @@ The code explicitly handles those two scopes.
 
 ## Example flow
 
-![Example Flow](docs/images/example-flow.png)
+![Example 1 - Local Flow](docs/images/example-flow.png)
 
-An example flow can be found in the docs/ folder. Basically, all it does is close and open shutters based on manual triggers. Those can be replaced by some logic (e.g. a node calculating the sunset and sunrise times). The output is sent to a local MQTT broker. 
+Two example flows can be found in the docs/ folder. The first one, basically, all it does is close and open shutters based on manual triggers. Those can be replaced by some logic (e.g. a node calculating the sunset and sunrise times). The output is sent to a local MQTT broker.
+
+![Example 2 - Cloud Scenario Flow](docs/images/cloud-example-flow.png)
+
+The seond example shows how to use control cloud scenarios; getting the list of existing scenario and then execute a given scenario.
 
 ## Compatibility
 

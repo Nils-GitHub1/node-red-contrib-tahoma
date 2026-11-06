@@ -1,0 +1,186 @@
+[
+  {
+    "id": "cloudtab001",
+    "type": "tab",
+    "label": "TaHoma Cloud Flow Example",
+    "disabled": false,
+    "info": "Example flow for Somfy TaHoma Cloud API."
+  },
+  {
+    "id": "cloudconfig01",
+    "type": "tahoma-cloud-config",
+    "name": "Somfy TaHoma Cloud",
+    "authMethod": "oauth",
+    "region": "europe",
+    "gatewayId": ""
+  },
+  {
+    "id": "cloudcomment01",
+    "type": "comment",
+    "z": "cloudtab001",
+    "name": "1. Configure your Somfy Cloud connection",
+    "info": "Open the TaHoma Cloud configuration node. Enter your Somfy email and password. Test the connection, discover your installations, select your installation and test again.",
+    "x": 330,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "cloudinject01",
+    "type": "inject",
+    "z": "cloudtab001",
+    "name": "Retrieve available scenarios",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 180,
+    "wires": [
+      [
+        "cloudscenarios01"
+      ]
+    ]
+  },
+  {
+    "id": "cloudscenarios01",
+    "type": "tahoma-scenarios",
+    "z": "cloudtab001",
+    "name": "Get TaHoma scenarios",
+    "cloudConfig": "cloudconfig01",
+    "x": 460,
+    "y": 180,
+    "wires": [
+      [
+        "clouddebug01"
+      ]
+    ]
+  },
+  {
+    "id": "clouddebug01",
+    "type": "debug",
+    "z": "cloudtab001",
+    "name": "Available scenarios",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "cloudcomment02",
+    "type": "comment",
+    "z": "cloudtab001",
+    "name": "2. Execute a scenario",
+    "info": "Replace the example scenario ID in the inject node with the ID of your desired scenario. You can find the ID in the Available scenarios debug output.",
+    "x": 300,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "cloudinject02",
+    "type": "inject",
+    "z": "cloudtab001",
+    "name": "Execute MY scenario",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "REPLACE_WITH_MY_SCENARIO_ID",
+    "payloadType": "str",
+    "x": 190,
+    "y": 360,
+    "wires": [
+      [
+        "cloudcontrol01"
+      ]
+    ]
+  },
+  {
+    "id": "cloudcontrol01",
+    "type": "tahoma-scenario-control",
+    "z": "cloudtab001",
+    "name": "Execute TaHoma scenario",
+    "cloudConfig": "cloudconfig01",
+    "scenarioId": "",
+    "timeout": 300,
+    "x": 470,
+    "y": 360,
+    "wires": [
+      [
+        "clouddebug02"
+      ]
+    ]
+  },
+  {
+    "id": "clouddebug02",
+    "type": "debug",
+    "z": "cloudtab001",
+    "name": "Scenario execution result",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 740,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "cloudcatch01",
+    "type": "catch",
+    "z": "cloudtab001",
+    "name": "Catch cloud errors",
+    "scope": [
+      "cloudscenarios01",
+      "cloudcontrol01"
+    ],
+    "uncaught": false,
+    "x": 210,
+    "y": 460,
+    "wires": [
+      [
+        "clouddebug03"
+      ]
+    ]
+  },
+  {
+    "id": "clouddebug03",
+    "type": "debug",
+    "z": "cloudtab001",
+    "name": "Cloud errors",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 470,
+    "y": 460,
+    "wires": []
+  }
+]

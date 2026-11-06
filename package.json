@@ -19,7 +19,7 @@
     "type": "git",
     "url": "git+https://github.com/Nils-GitHub1/node-red-contrib-tahoma.git"
   },
-  "license": "Apache-2.0 AND MIT",
+  "license": "Apache-2.0 and MIT",
   "author": "Nicolas Nunge <me@nikkow.eu> (https://github.com/nikkow/node-red-contrib-tahoma)",
   "contributors": [
     {
@@ -66,7 +66,7 @@
       "tahoma": "dist/nodes/tahoma.js",
       "tahoma-config": "dist/nodes/tahoma-config.js",
       "tahoma-read": "dist/nodes/tahoma-read.js",
-      "tahoma-scenario-ctrl": "dist/nodes/tahoma-scenario-control.js",
+      "tahoma-scenario-control": "dist/nodes/tahoma-scenario-control.js",
       "tahoma-cloud-config": "dist/nodes/tahoma-cloud-config.js",
       "tahoma-scenarios": "dist/nodes/tahoma-scenarios.js"
     }

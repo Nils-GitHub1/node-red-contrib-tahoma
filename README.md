@@ -49,10 +49,10 @@ If you create a separate account, make sure it has the appropriate permissions t
 
 ### Origin and History
 
-Fork of Nikkhow (Nicolas Nunge) package, with merge of @packyr and @blondak forks. With some clean-up, adds (Europe/America/Oceania Somfy server choice for API token generation) and removal (watson/bonjour outdated package as dependency which implied some security vulnerability). Important Note for users of legacy v2.x and v1.x of Nikkhow versions (and potentially other forks)
+Fork of [@Nikkhow (Nicolas Nunge)](https://github.com/nikkow/node-red-contrib-tahoma) package, with merge of [@packyr](https://github.com/packyr/node-red-contrib-tahoma) and [@blondak](https://github.com/blondak/node-red-contrib-tahoma) forks. With some clean-up, adds (Europe/America/Oceania Somfy server choice for API token generation) and removal (watson/bonjour outdated package as dependency which implied some security vulnerability). Important Note for users of legacy v2.x and v1.x of Nikkhow versions (and potentially other forks)
 This 3rd version implements a new API released by Somfy (yes, another one). This time, the local device control nodes no longer relies on any cloud-based API, but will directly discuss with your local Tahoma box.
-The cloud scenario control code / nodes introduced in release 3.3.2 implement the Somfy OAuth authentication mechanism adapted from the python-overkiz-api,
-copyright (c) 2020 Mick Vleeshouwer, original repository: https://github.com/iMicknl/python-overkiz-api.
+The cloud scenario control code / nodes introduced in release 3.3.2 implement the Somfy OAuth authentication mechanism adapted from the [python-overkiz-api](https://github.com/iMicknl/python-overkiz-api),
+copyright (c) 2020 Mick Vleeshouwer.
 
 #### How to upgrade from Nikkhow original package or its forks ?
 

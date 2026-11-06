@@ -4,6 +4,13 @@
 
 # Somfy Tahoma for Node-RED
 
+[![npm version](https://img.shields.io/npm/v/%40nils-github1/node-red-contrib-tahoma?logo=npm&label=npm)](https://www.npmjs.com/package/@nils-github1/node-red-contrib-tahoma)
+[![npm downloads](https://img.shields.io/npm/dt/%40nils-github1/node-red-contrib-tahoma?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/@nils-github1/node-red-contrib-tahoma)
+[![License](https://img.shields.io/npm/l/%40nils-github1/node-red-contrib-tahoma)](https://github.com/Nils-GitHub1/node-red-contrib-tahoma/blob/develop/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Nils-GitHub1/node-red-contrib-tahoma?style=social)](https://github.com/Nils-GitHub1/node-red-contrib-tahoma)
+[![Build and Lint](https://travis-ci.com/Nils-GitHub1/node-red-contrib-tahoma.svg?branch=develop)](https://travis-ci.com/Nils-GitHub1/node-red-contrib-tahoma)
+[![Code size](https://img.shields.io/github/languages/code-size/Nils-GitHub1/node-red-contrib-tahoma)]
+
 Since version **3.3.2**, this package supports two complementary ways to interact with your Somfy TaHoma installation.
 
 ## Two ways to control your Somfy devices
